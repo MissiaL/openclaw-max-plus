@@ -425,6 +425,10 @@ export interface MaxUpdate {
   chat_id?: number;
   user?: MaxUser;
   inviter_id?: number;
+  /** bot_added / bot_removed: true when the chat is a channel (optional in this flat union type). */
+  is_channel?: boolean;
+  /** chat_title_changed: the new chat title (optional in this flat union type). */
+  title?: string;
   user_locale?: string | null;
   [key: string]: unknown;
 }

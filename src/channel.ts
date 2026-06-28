@@ -23,6 +23,7 @@ import {
 import { listMaxAccountIds, type ResolvedMaxAccount, resolveMaxAccount } from './accounts.js';
 import { maxMessageActions } from './actions.js';
 import { MaxApi } from './api.js';
+import { listChats } from './chat-registry.js';
 import { MaxConfigSchema } from './config-schema.js';
 import {
   buildMaxModelBrowseChannelData,
@@ -367,23 +368,15 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount> = {
     },
     listGroups: async ({ cfg, accountId }) => {
       const account = resolveMaxAccount({ cfg, accountId });
-      if (!account.token) return [];
-      try {
-        const api = new MaxApi({ token: account.token, timeoutMs: 5000 });
-        const result = await api.getChats({ count: 100 });
-        return (result.chats ?? [])
-          .filter((chat) => chat.type === 'chat' || chat.type === 'channel')
-          .map((chat) => {
-            const kind: 'channel' | 'group' = chat.type === 'channel' ? 'channel' : 'group';
-            return {
-              kind,
-              id: String(chat.chat_id),
-              name: chat.title || undefined,
-            };
-          });
-      } catch {
-        return [];
-      }
+      // GET /chats is deprecated (no REST replacement); read the event-driven
+      // registry populated by the monitor. No network call, no token needed —
+      // the registry is local, so accumulated chats show even if the token is
+      // not currently wired.
+      return listChats(account.accountId).map((chat) => ({
+        kind: chat.kind,
+        id: String(chat.chatId),
+        name: chat.title || undefined,
+      }));
     },
   },
 

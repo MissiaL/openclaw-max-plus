@@ -230,6 +230,11 @@ export class MaxApi {
 
   // ── Chats ──
 
+  /**
+   * @deprecated MAX removed GET /chats support (June 2026) with no REST
+   * replacement. The bot accumulates chats from updates instead — see
+   * `src/chat-registry.ts`. Kept for compatibility; do not add new call-sites.
+   */
   async getChats(params?: {
     count?: number;
     marker?: number;
