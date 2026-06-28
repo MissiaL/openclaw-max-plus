@@ -10,7 +10,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ResolvedMaxAccount } from './accounts.js';
 import type { MaxApi, MaxChat, MaxMessage, MaxUpdate } from './api.js';
-import { __resetChatRegistryForTest, flushChatRegistry, listChats } from './chat-registry.js';
+import {
+  __resetChatRegistryForTest,
+  flushChatRegistry,
+  listChats,
+  upsertChat,
+} from './chat-registry.js';
 import {
   dispatchUpdate,
   processIncomingMessage,
@@ -293,6 +298,98 @@ describe('MAX Monitor', () => {
       expect(onDisk).toEqual([
         expect.objectContaining({ chatId: -100, kind: 'group', title: 'Team' }),
       ]);
+    });
+  });
+
+  describe('group conversation label', () => {
+    let tempRoot: string;
+    let prevStateDir: string | undefined;
+
+    beforeEach(() => {
+      tempRoot = mkdtempSync(join(tmpdir(), 'max-label-'));
+      prevStateDir = process.env.OPENCLAW_STATE_DIR;
+      process.env.OPENCLAW_STATE_DIR = tempRoot;
+      __resetChatRegistryForTest();
+    });
+
+    afterEach(() => {
+      __resetChatRegistryForTest();
+      if (prevStateDir == null) delete process.env.OPENCLAW_STATE_DIR;
+      else process.env.OPENCLAW_STATE_DIR = prevStateDir;
+      rmSync(tempRoot, { recursive: true, force: true });
+    });
+
+    function installRuntimeSpy() {
+      const finalizeInboundContext = vi.fn((ctx: Record<string, unknown>) => ctx);
+      setMaxRuntime({
+        channel: {
+          media: { fetchRemoteMedia: vi.fn(), saveMediaBuffer: vi.fn() },
+          pairing: { readAllowFromStore: vi.fn(async () => [] as string[]) },
+          routing: {
+            resolveAgentRoute: vi.fn(() => ({
+              agentId: 'agent',
+              accountId: 'default',
+              sessionKey: 'sess',
+              mainSessionKey: 'sess',
+            })),
+          },
+          session: {
+            resolveStorePath: vi.fn(() => 'store'),
+            readSessionUpdatedAt: vi.fn(() => undefined),
+            recordSessionMetaFromInbound: vi.fn(async () => undefined),
+          },
+          reply: {
+            resolveEnvelopeFormatOptions: vi.fn(() => ({})),
+            formatAgentEnvelope: vi.fn(() => 'body'),
+            finalizeInboundContext,
+            dispatchReplyWithBufferedBlockDispatcher: vi.fn(async () => undefined),
+          },
+          text: {},
+          media2: {},
+        },
+      } as never);
+      return finalizeInboundContext;
+    }
+
+    const account = {
+      accountId: 'default',
+      token: 'tok',
+      config: { groups: { '*': { requireMention: false } }, streamMode: 'off' },
+    } as unknown as ResolvedMaxAccount;
+
+    const api = { sendAction: vi.fn(async () => undefined) } as unknown as MaxApi;
+
+    const groupMessage = (): MaxMessage =>
+      ({
+        sender: { user_id: 123, first_name: 'U', is_bot: false },
+        recipient: { chat_id: -100, chat_type: 'chat' },
+        timestamp: 1,
+        body: { mid: 'm1', text: 'hello' },
+      }) as unknown as MaxMessage;
+
+    it('puts the registry group title into the conversation label', async () => {
+      const finalizeInboundContext = installRuntimeSpy();
+      upsertChat('default', { chatId: -100, kind: 'group', title: 'ИИ агент супер', seenAt: 1 });
+      await processIncomingMessage(groupMessage(), 'ru', {
+        api,
+        account,
+        config: {} as never,
+        abortSignal: new AbortController().signal,
+      });
+      const ctx = finalizeInboundContext.mock.calls[0][0] as { ConversationLabel?: string };
+      expect(ctx.ConversationLabel).toBe('ИИ агент супер id:-100');
+    });
+
+    it('falls back to chat:<id> when the title is unknown', async () => {
+      const finalizeInboundContext = installRuntimeSpy();
+      await processIncomingMessage(groupMessage(), 'ru', {
+        api,
+        account,
+        config: {} as never,
+        abortSignal: new AbortController().signal,
+      });
+      const ctx = finalizeInboundContext.mock.calls[0][0] as { ConversationLabel?: string };
+      expect(ctx.ConversationLabel).toBe('chat:-100');
     });
   });
 });

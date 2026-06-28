@@ -20,6 +20,7 @@ import {
 } from './api.js';
 import {
   flushChatRegistry,
+  getChatTitle,
   markTitleFetched,
   needsTitle,
   removeChat,
@@ -603,7 +604,17 @@ export async function processIncomingMessage(
   });
 
   // Build context
-  const fromLabel = isGroup ? `chat:${chatIdStr}` : senderName || `user:${senderId}`;
+  // For groups, prefer the human-readable title (kept fresh by the chat
+  // registry, incl. chat_title_changed) so the agent sees the group name, not
+  // just a numeric id — matching the Telegram channel's "<title> id:<id>"
+  // format. Falls back to chat:<id> until the title is known.
+  const groupTitle =
+    isGroup && chatId != null ? getChatTitle(account.accountId, chatId) : undefined;
+  const fromLabel = isGroup
+    ? groupTitle
+      ? `${groupTitle} id:${chatIdStr}`
+      : `chat:${chatIdStr}`
+    : senderName || `user:${senderId}`;
 
   const storePath = core.channel.session.resolveStorePath(config.session?.store, {
     agentId: route.agentId,
