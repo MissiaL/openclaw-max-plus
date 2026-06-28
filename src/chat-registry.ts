@@ -166,6 +166,11 @@ export function listChats(accountId: string): KnownChat[] {
   return [...load(accountId).values()];
 }
 
+/** Known human-readable title for a chat, or undefined if not recorded yet. */
+export function getChatTitle(accountId: string, chatId: number): string | undefined {
+  return load(accountId).get(chatId)?.title;
+}
+
 /** Force any pending debounced writes to disk now (shutdown / tests). */
 export function flushChatRegistry(accountId?: string): void {
   if (accountId != null) {
