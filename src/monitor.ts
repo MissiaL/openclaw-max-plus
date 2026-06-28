@@ -5,7 +5,6 @@
  * finalizeInboundContext → dispatchReplyWithBufferedBlockDispatcher
  */
 
-import { createTypingCallbacks } from 'openclaw/plugin-sdk/channel-reply-options-runtime';
 import type { ChannelLogSink } from 'openclaw/plugin-sdk/channel-runtime';
 import { createReplyPrefixOptions } from 'openclaw/plugin-sdk/channel-runtime';
 import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
@@ -606,19 +605,25 @@ export async function processIncomingMessage(
   });
 
   // Typing indicator while the agent processes. MAX's "typing_on" action
-  // expires after a few seconds, so a single call only flashes briefly. Hand
-  // the host a `start` callback instead: the dispatcher keeps the indicator
-  // alive (re-firing on an interval) for the whole turn and stops it on idle.
-  const typingCallbacks =
+  // expires after a few seconds, so it must be re-fired to stay visible.
+  // The host's TypingController already drives that keepalive: it calls
+  // onReplyStart on an interval for the whole turn and stops only when the
+  // run is complete and the dispatch queue is empty.
+  //
+  // Do NOT wrap this in createTypingCallbacks: that helper's onIdle seals
+  // typing permanently on the first dispatch pause (pending===0), which the
+  // dispatcher hits repeatedly while streaming text or generating media —
+  // making the indicator flicker and die mid-turn. Passing a bare
+  // onReplyStart lets the host controller own the lifecycle correctly.
+  const onReplyStart =
     chatId != null
-      ? createTypingCallbacks({
-          start: async () => {
+      ? async () => {
+          try {
             await opts.api.sendAction(chatId, 'typing_on');
-          },
-          onStartError: (err) => {
+          } catch (err) {
             log?.debug?.(`[${account.accountId}] typing_on failed: ${String(err)}`);
-          },
-        })
+          }
+        }
       : undefined;
 
   // Streaming modes: "partial" = edit single message, "block" = each block as separate message
@@ -703,7 +708,7 @@ export async function processIncomingMessage(
     cfg: config,
     dispatcherOptions: {
       ...prefixOptions,
-      ...(typingCallbacks ? { typingCallbacks } : {}),
+      ...(onReplyStart ? { onReplyStart } : {}),
       deliver: async (payload) => {
         if (useEditStreaming && draftMid && payload.text) {
           // Final delivery replaces the draft message with final text
