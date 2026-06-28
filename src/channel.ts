@@ -46,8 +46,7 @@ function resolveMaxGroupConfig(
   accountId?: string | null,
 ) {
   const maxSection = (cfg.channels as Record<string, unknown>)?.max as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   if (!maxSection) return { groupConfig: undefined, defaultConfig: undefined };
 
   // Resolve groups map: account-level takes priority over channel-level
@@ -119,8 +118,7 @@ function resolveMaxGroupToolPolicy(params: {
   // Default config fallback
   const defaultSenderPolicy = resolveToolsBySender({
     toolsBySender: defaultConfig?.toolsBySender as
-      | Record<string, GroupToolPolicyConfig>
-      | undefined,
+      Record<string, GroupToolPolicyConfig> | undefined,
     senderId: params.senderId,
     senderName: params.senderName,
     senderUsername: params.senderUsername,
@@ -254,8 +252,7 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount> = {
     resolveDmPolicy: ({ cfg, accountId, account }) => {
       const resolvedAccountId = accountId ?? account.accountId ?? DEFAULT_ACCOUNT_ID;
       const maxSection = (cfg.channels as Record<string, unknown>)?.max as
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown> | undefined;
       const useAccountPath = Boolean(
         (maxSection?.accounts as Record<string, unknown>)?.[resolvedAccountId],
       );
@@ -722,8 +719,7 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount> = {
 
       // Register bot commands if configured
       const commands = ctx.cfg.channels?.max?.commands as
-        | Array<{ name: string; description?: string }>
-        | undefined;
+        Array<{ name: string; description?: string }> | undefined;
       if (commands?.length) {
         try {
           await api.setMyCommands(commands);
