@@ -394,7 +394,7 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount> = {
     textChunkLimit: 4000,
 
     sendPayload: async ({ to, text, payload, mediaUrl, accountId, replyToId }) => {
-      const cfg = await getMaxRuntime().config.loadConfig();
+      const cfg = getMaxRuntime().config.current() as OpenClawConfig;
       const account = resolveMaxAccount({ cfg, accountId });
       if (!account.token) throw new Error('MAX bot token not configured');
 
@@ -428,7 +428,7 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount> = {
     },
 
     sendText: async ({ to, text, accountId, replyToId }) => {
-      const cfg = await getMaxRuntime().config.loadConfig();
+      const cfg = getMaxRuntime().config.current() as OpenClawConfig;
       const account = resolveMaxAccount({ cfg, accountId });
       if (!account.token) throw new Error('MAX bot token not configured');
 
@@ -445,7 +445,7 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount> = {
     },
 
     sendMedia: async ({ to, text, mediaUrl, accountId, replyToId }) => {
-      const cfg = await getMaxRuntime().config.loadConfig();
+      const cfg = getMaxRuntime().config.current() as OpenClawConfig;
       const account = resolveMaxAccount({ cfg, accountId });
       if (!account.token) throw new Error('MAX bot token not configured');
 
@@ -744,34 +744,30 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount> = {
       });
     },
 
-    logoutAccount: async ({ accountId, cfg }) => {
-      const nextCfg = { ...cfg } as OpenClawConfig;
-      const channels = { ...(nextCfg.channels as Record<string, unknown>) };
-      const maxSection = channels.max
-        ? { ...(channels.max as Record<string, unknown>) }
-        : undefined;
-      let cleared = false;
-
-      if (maxSection) {
-        if (accountId === DEFAULT_ACCOUNT_ID && maxSection.botToken) {
-          delete maxSection.botToken;
-          cleared = true;
-        }
-
-        const accounts = maxSection.accounts as Record<string, unknown> | undefined;
-        if (accounts && accountId in accounts) {
-          delete (accounts as Record<string, unknown>)[accountId];
-          cleared = true;
-        }
-
-        channels.max = maxSection;
-        nextCfg.channels = channels;
-
-        if (cleared) {
-          await getMaxRuntime().config.writeConfigFile(nextCfg);
-        }
-      }
-
+    logoutAccount: async ({ accountId }) => {
+      // Mutate the config file through the host so it controls write/reload
+      // (the old config.writeConfigFile is deprecated and bypasses the boundary).
+      const { result } = await getMaxRuntime().config.mutateConfigFile<boolean>({
+        base: 'runtime',
+        afterWrite: { mode: 'auto' },
+        mutate: (draft) => {
+          const channels = draft.channels as Record<string, unknown> | undefined;
+          const max = channels?.max as Record<string, unknown> | undefined;
+          if (!max) return false;
+          let didClear = false;
+          if (accountId === DEFAULT_ACCOUNT_ID && max.botToken) {
+            delete max.botToken;
+            didClear = true;
+          }
+          const accounts = max.accounts as Record<string, unknown> | undefined;
+          if (accounts && accountId in accounts) {
+            delete accounts[accountId];
+            didClear = true;
+          }
+          return didClear;
+        },
+      });
+      const cleared = result ?? false;
       return { cleared, loggedOut: cleared };
     },
   },
