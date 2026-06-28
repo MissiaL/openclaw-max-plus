@@ -506,9 +506,9 @@ export async function processIncomingMessage(
       // allowFrom, else account-level groupAllowFrom). When none is set, any
       // member of an allowed chat passes (still mention-gated below).
       const groupCfg = groups[chatIdStr] ?? groups['*'];
-      const senderAllow = ((groupCfg?.allowFrom ??
-        account.config.groupAllowFrom ??
-        []) as Array<string | number>).map(String);
+      const senderAllow = (
+        (groupCfg?.allowFrom ?? account.config.groupAllowFrom ?? []) as Array<string | number>
+      ).map(String);
       if (senderAllow.length > 0) {
         const senderStr = String(senderId);
         if (!senderAllow.includes(senderStr) && !senderAllow.includes('*')) {

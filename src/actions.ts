@@ -223,7 +223,9 @@ export const maxMessageActions: ChannelMessageActionAdapter = {
           const fs = await import('node:fs/promises');
           const os = await import('node:os');
           const path = await import('node:path');
-          const safeName = path.basename(loaded.fileName ?? 'file').replace(/[^A-Za-z0-9._-]/g, '_');
+          const safeName = path
+            .basename(loaded.fileName ?? 'file')
+            .replace(/[^A-Za-z0-9._-]/g, '_');
           const tmpPath = path.join(
             os.tmpdir(),
             `max-media-${Date.now()}-${Math.round(Math.random() * 1e9)}-${safeName}`,

@@ -227,7 +227,10 @@ export async function sendMaxMediaMessage(
   let tmpToCleanup: string | undefined;
   if (/^https?:\/\//i.test(mediaPath)) {
     const maxBytes = ((opts as { mediaMaxMb?: number }).mediaMaxMb ?? 20) * 1024 * 1024;
-    const loaded = await getMaxRuntime().channel.media.fetchRemoteMedia({ url: mediaPath, maxBytes });
+    const loaded = await getMaxRuntime().channel.media.fetchRemoteMedia({
+      url: mediaPath,
+      maxBytes,
+    });
     const fs = await import('node:fs/promises');
     const os = await import('node:os');
     const path = await import('node:path');

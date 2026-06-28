@@ -91,7 +91,6 @@ export interface FileAttachment {
   payload: {
     token: string;
     url: string;
-    file_id: number;
     filename?: string;
     size?: number;
   };
@@ -339,6 +338,7 @@ export interface MaxUser {
   username?: string | null;
   is_bot: boolean;
   last_activity_time?: number;
+  /** @deprecated use first_name + last_name */
   name?: string | null;
   description?: string | null;
   avatar_url?: string;
@@ -361,7 +361,6 @@ export interface MaxChat {
   description?: string | null;
   dialog_with_user?: MaxUser;
   messages_count?: number;
-  chat_message_id?: string;
   pinned_message?: MaxMessage | null;
 }
 
@@ -406,14 +405,17 @@ export type MaxUpdateType =
   | 'message_callback'
   | 'message_edited'
   | 'message_removed'
-  | 'message_reaction_created'
-  | 'message_reaction_updated'
   | 'bot_added'
   | 'bot_removed'
   | 'bot_started'
+  | 'bot_stopped'
   | 'user_added'
   | 'user_removed'
-  | 'chat_title_changed';
+  | 'chat_title_changed'
+  | 'dialog_removed'
+  | 'dialog_cleared'
+  | 'dialog_muted'
+  | 'dialog_unmuted';
 
 export interface MaxUpdate {
   update_type: MaxUpdateType;
