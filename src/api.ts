@@ -85,6 +85,7 @@ export class MaxApi {
     params?: Record<string, string | number | boolean | undefined | null>,
     body?: unknown,
     timeoutMs?: number,
+    externalSignal?: AbortSignal,
   ): Promise<T> {
     const url = new URL(path, this.baseUrl);
     if (params) {
@@ -95,6 +96,11 @@ export class MaxApi {
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs ?? this.timeoutMs);
+    // Abort on either the internal timeout or an external signal (e.g. graceful
+    // shutdown) so a long poll doesn't block teardown for ~timeout seconds.
+    const signal = externalSignal
+      ? AbortSignal.any([controller.signal, externalSignal])
+      : controller.signal;
 
     try {
       const res = await fetch(url.toString(), {
@@ -104,7 +110,7 @@ export class MaxApi {
           ...(body ? { 'Content-Type': 'application/json' } : {}),
         },
         body: body ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
+        signal,
       });
 
       // Read the body defensively: prefer text() so non-JSON error pages
@@ -261,12 +267,15 @@ export class MaxApi {
 
   // ── Updates (long polling) ──
 
-  async getUpdates(params?: {
-    limit?: number;
-    timeout?: number;
-    marker?: number | null;
-    types?: MaxUpdateType[];
-  }): Promise<MaxUpdatesResponse> {
+  async getUpdates(
+    params?: {
+      limit?: number;
+      timeout?: number;
+      marker?: number | null;
+      types?: MaxUpdateType[];
+    },
+    signal?: AbortSignal,
+  ): Promise<MaxUpdatesResponse> {
     const qp: Record<string, string | number> = {};
     if (params?.limit) qp.limit = params.limit;
     if (params?.timeout != null) qp.timeout = params.timeout;
@@ -275,7 +284,7 @@ export class MaxApi {
 
     // Long polling needs a longer timeout
     const pollTimeout = ((params?.timeout ?? 30) + 5) * 1000;
-    return this.request('GET', '/updates', qp, undefined, pollTimeout);
+    return this.request('GET', '/updates', qp, undefined, pollTimeout, signal);
   }
 
   // ── Subscriptions (webhooks) ──

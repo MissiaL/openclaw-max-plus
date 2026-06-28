@@ -11,7 +11,13 @@ import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
 
 import type { ResolvedMaxAccount } from './accounts.js';
 import type { MaxApi } from './api.js';
-import { type MaxCallback, type MaxMessage, type MaxUpdate, type MaxUser } from './api.js';
+import {
+  MaxApiError,
+  type MaxCallback,
+  type MaxMessage,
+  type MaxUpdate,
+  type MaxUser,
+} from './api.js';
 import { getMaxRuntime } from './runtime.js';
 import {
   answerMaxCallback,
@@ -59,26 +65,30 @@ export async function startMaxPolling(opts: MaxMonitorOptions): Promise<void> {
 async function startMaxPollingLoop(opts: MaxMonitorOptions): Promise<void> {
   const { api, account, abortSignal, log } = opts;
   let marker: number | null = null;
+  let consecutiveErrors = 0;
 
   log?.info(`[${account.accountId}] MAX long-polling started`);
 
   while (!abortSignal.aborted) {
     try {
-      const resp = await api.getUpdates({
-        timeout: 30,
-        marker: marker ?? undefined,
-        types: [
-          'message_created',
-          'message_callback',
-          'message_edited',
-          'message_removed',
-          'message_reaction_created',
-          'message_reaction_updated',
-          'bot_started',
-          'bot_added',
-          'bot_removed',
-        ],
-      });
+      const resp = await api.getUpdates(
+        {
+          timeout: 30,
+          marker: marker ?? undefined,
+          types: [
+            'message_created',
+            'message_callback',
+            'message_edited',
+            'message_removed',
+            'bot_started',
+            'bot_added',
+            'bot_removed',
+          ],
+        },
+        abortSignal,
+      );
+
+      consecutiveErrors = 0;
 
       if (resp.marker != null) {
         marker = resp.marker;
@@ -96,9 +106,32 @@ async function startMaxPollingLoop(opts: MaxMonitorOptions): Promise<void> {
       }
     } catch (err) {
       if (abortSignal.aborted) break;
-      log?.error(`[${account.accountId}] Polling error: ${String(err)}`);
-      // Back off on error
-      await sleep(3000);
+
+      // Fatal auth error: stop polling instead of hammering with a bad token.
+      const status = err instanceof MaxApiError ? err.status : undefined;
+      if (status === 401 || status === 403) {
+        log?.error(`[${account.accountId}] Polling stopped: auth error ${status}`);
+        break;
+      }
+
+      consecutiveErrors += 1;
+
+      // A stale marker can wedge the loop; drop it after repeated failures.
+      if (consecutiveErrors >= 3 && marker != null) {
+        log?.error(
+          `[${account.accountId}] Resetting poll marker after ${consecutiveErrors} consecutive errors`,
+        );
+        marker = null;
+      }
+
+      // Exponential backoff with jitter, capped at 30s (longer base on 429).
+      const base = status === 429 ? 5000 : 1000;
+      const delay = Math.min(base * 2 ** (consecutiveErrors - 1), 30_000);
+      const jitter = Math.round(Math.random() * 500);
+      log?.error(
+        `[${account.accountId}] Polling error (#${consecutiveErrors}, status=${status ?? 'n/a'}); retry in ${delay}ms: ${String(err)}`,
+      );
+      await sleep(delay + jitter);
     }
   }
 
@@ -719,18 +752,34 @@ export async function processIncomingMessage(
       ...prefixOptions,
       ...(onReplyStart ? { onReplyStart } : {}),
       deliver: async (payload) => {
-        if (useEditStreaming && draftMid && payload.text) {
-          // Final delivery replaces the draft message with final text
-          const finalText = payload.text;
-          if (finalText !== draftLastText) {
+        const finalText = payload.text;
+        // Edit-streaming finalize: replace the draft with the final text — but
+        // only when it fits the single-message cap. A longer answer cannot be an
+        // edit (MAX 400s at >DRAFT_MAX_CHARS), so it must fall through to chunked
+        // delivery instead of being silently dropped.
+        if (useEditStreaming && draftMid && finalText && finalText.length <= DRAFT_MAX_CHARS) {
+          if (finalText.trimEnd() !== draftLastText) {
             try {
               await editMaxMessage(draftMid, finalText, {
                 token: account.token,
                 format: 'markdown',
               });
-              draftLastText = finalText;
-            } catch {
-              /* best effort */
+              draftLastText = finalText.trimEnd();
+            } catch (err) {
+              // Edit failed — fall back to chunked send so the reply isn't lost.
+              log?.debug?.(
+                `[${account.accountId}] draft finalize edit failed, falling back to send: ${String(err)}`,
+              );
+              await deliverMaxReply({
+                payload,
+                account,
+                chatId: chatIdStr,
+                replyToId: replyMid,
+                callbackId,
+                config,
+                log,
+                statusSink,
+              });
             }
           }
           draftStopped = true;
@@ -751,7 +800,9 @@ export async function processIncomingMessage(
           return;
         }
 
-        // Non-streaming path or no draft yet
+        // Non-streaming path, no draft yet, or text too long for an edit —
+        // chunked delivery handles the >DRAFT_MAX_CHARS case.
+        draftStopped = true;
         await deliverMaxReply({
           payload,
           account,
@@ -776,7 +827,13 @@ export async function processIncomingMessage(
             },
           }
         : {}),
-      ...(useBlockStreaming ? { disableBlockStreaming: false } : {}),
+      // In partial (edit-streaming) mode disable block streaming so the block
+      // dispatcher doesn't fight the draft editor over the same message.
+      ...(useEditStreaming
+        ? { disableBlockStreaming: true }
+        : useBlockStreaming
+          ? { disableBlockStreaming: false }
+          : {}),
     },
   });
 

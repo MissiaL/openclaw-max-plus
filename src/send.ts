@@ -5,7 +5,6 @@
 import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
 
 import { resolveMaxAccount } from './accounts.js';
-import { getMaxRuntime } from './runtime.js';
 import {
   MaxApi,
   type MaxAttachment,
@@ -14,6 +13,7 @@ import {
   type MaxSendResult,
   type MaxStickerAttachment,
 } from './api.js';
+import { getMaxRuntime } from './runtime.js';
 
 export type MaxSendButton = {
   text: string;
