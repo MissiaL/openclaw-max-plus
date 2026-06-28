@@ -210,7 +210,19 @@ async function dispatchUpdate(update: MaxUpdate, opts: MaxMonitorOptions): Promi
 
   switch (update.update_type) {
     case 'message_created': {
-      if (!update.message) break;
+      if (!update.message) {
+        // MAX violates its own OpenAPI contract (message is required) for
+        // native voice notes recorded with the mic: the bot receives a
+        // bodyless message_created with no message/chat_id/mid, and the note
+        // never appears in chat history either. There is nothing the plugin
+        // can act on (not even a chat to reply to) — this is a MAX platform
+        // limitation. Forwarded/attached audio FILES do arrive normally (as
+        // type:"file"). Logged so the silent drop is visible during debugging.
+        log?.warn?.(
+          `[${account.accountId}] message_created without message — likely a native voice note (MAX does not deliver these to bots); skipping`,
+        );
+        break;
+      }
       // Skip messages from the bot itself
       if (opts.botUserId && update.message.sender?.user_id === opts.botUserId) break;
       statusSink?.({ lastInboundAt: Date.now() });
