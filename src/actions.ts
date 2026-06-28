@@ -2,17 +2,26 @@
  * MAX channel message actions adapter — implements message tool actions
  */
 
-import type { OpenClawConfig } from "openclaw/plugin-sdk/core";
-import type { ChannelMessageActionAdapter } from "openclaw/plugin-sdk/channel-runtime";
-import { jsonResult } from "openclaw/plugin-sdk/agent-runtime";
-import { readStringParam } from "openclaw/plugin-sdk/param-readers";
-import { listMaxAccountIds, resolveMaxAccount } from "./accounts.js";
-import { getLastStickerCode } from "./sticker-cache.js";
-import { sendMaxMessage, editMaxMessage, deleteMaxMessage, sendMaxMediaMessage, sendMaxSticker, sendMaxContact, sendMaxLocation } from "./send.js";
-import { getMaxRuntime } from "./runtime.js";
+import { jsonResult } from 'openclaw/plugin-sdk/agent-runtime';
+import type { ChannelMessageActionAdapter } from 'openclaw/plugin-sdk/channel-runtime';
+import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
+import { readStringParam } from 'openclaw/plugin-sdk/param-readers';
 
-const providerId = "max";
-const mediaSourceKeys = ["media", "filePath", "path", "fileUrl", "url", "buffer", "image"] as const;
+import { listMaxAccountIds, resolveMaxAccount } from './accounts.js';
+import { getMaxRuntime } from './runtime.js';
+import {
+  deleteMaxMessage,
+  editMaxMessage,
+  sendMaxContact,
+  sendMaxLocation,
+  sendMaxMediaMessage,
+  sendMaxMessage,
+  sendMaxSticker,
+} from './send.js';
+import { getLastStickerCode } from './sticker-cache.js';
+
+const providerId = 'max';
+const mediaSourceKeys = ['media', 'filePath', 'path', 'fileUrl', 'url', 'buffer', 'image'] as const;
 
 function listEnabledAccounts(cfg: OpenClawConfig) {
   return listMaxAccountIds(cfg)
@@ -21,10 +30,12 @@ function listEnabledAccounts(cfg: OpenClawConfig) {
 }
 
 function readTargetParam(params: Record<string, unknown>, required = true): string | undefined {
-  return readStringParam(params, "to")
-    ?? readStringParam(params, "target")
-    ?? readStringParam(params, "chatId")
-    ?? readStringParam(params, "channelId", { required });
+  return (
+    readStringParam(params, 'to') ??
+    readStringParam(params, 'target') ??
+    readStringParam(params, 'chatId') ??
+    readStringParam(params, 'channelId', { required })
+  );
 }
 
 function readMediaSource(params: Record<string, unknown>): string | undefined {
@@ -36,10 +47,10 @@ function readMediaSource(params: Record<string, unknown>): string | undefined {
   if (!Array.isArray(params.attachments)) return undefined;
 
   for (const item of params.attachments) {
-    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
     const attachment = item as Record<string, unknown>;
     for (const key of mediaSourceKeys) {
-      const value = typeof attachment[key] === "string" ? attachment[key] : undefined;
+      const value = typeof attachment[key] === 'string' ? attachment[key] : undefined;
       if (value) return value;
     }
   }
@@ -54,8 +65,8 @@ export const maxMessageActions: ChannelMessageActionAdapter = {
       return null;
     }
     return {
-      actions: ["send", "edit", "delete", "sticker", "sendAttachment"],
-      capabilities: ["buttons"] as unknown as readonly ("presentation" | "delivery-pin")[],
+      actions: ['send', 'edit', 'delete', 'sticker', 'sendAttachment'],
+      capabilities: ['buttons'] as unknown as readonly ('presentation' | 'delivery-pin')[],
     };
   },
 
@@ -63,22 +74,26 @@ export const maxMessageActions: ChannelMessageActionAdapter = {
     // Extract routing info for ALL actions (send, edit, delete, sticker)
     // Core uses extractToolSend for routing all message tool actions to plugin
     let to =
-      typeof args.target === "string" ? args.target :
-      typeof args.to === "string" ? args.to :
-      typeof args.chatId === "string" ? args.chatId :
-      typeof args.channelId === "string" ? args.channelId :
-      undefined;
+      typeof args.target === 'string'
+        ? args.target
+        : typeof args.to === 'string'
+          ? args.to
+          : typeof args.chatId === 'string'
+            ? args.chatId
+            : typeof args.channelId === 'string'
+              ? args.channelId
+              : undefined;
     if (!to) {
       // For edit/delete, target may not be present — use a placeholder
       // so core still routes to this plugin's handleAction
-      to = typeof args.messageId === "string" ? "__message_action__" : undefined;
+      to = typeof args.messageId === 'string' ? '__message_action__' : undefined;
     }
     if (!to) {
       return null;
     }
     // Strip provider prefix (e.g. "max:188862440" → "188862440")
-    if (to.startsWith("max:")) to = to.slice(4);
-    const accountId = typeof args.accountId === "string" ? args.accountId.trim() : undefined;
+    if (to.startsWith('max:')) to = to.slice(4);
+    const accountId = typeof args.accountId === 'string' ? args.accountId.trim() : undefined;
     return { to, accountId };
   },
 
@@ -88,33 +103,37 @@ export const maxMessageActions: ChannelMessageActionAdapter = {
       accountId,
     });
     if (!account.token) {
-      throw new Error("MAX bot token not configured");
+      throw new Error('MAX bot token not configured');
     }
 
     // Strip provider prefix from target (e.g. "max:188862440" → "188862440")
     const stripPrefix = (val: string | undefined): string | undefined => {
       if (!val) return val;
-      return val.startsWith("max:") ? val.slice(4) : val;
+      return val.startsWith('max:') ? val.slice(4) : val;
     };
 
-    if (action === "send") {
+    if (action === 'send') {
       const to = stripPrefix(readTargetParam(params))!;
-      const content = readStringParam(params, "message", {
+      const content = readStringParam(params, 'message', {
         required: true,
         allowEmpty: true,
       });
-      const replyTo = readStringParam(params, "replyTo");
-      const stickerId = readStringParam(params, "stickerId");
+      const replyTo = readStringParam(params, 'replyTo');
+      const stickerId = readStringParam(params, 'stickerId');
 
       // Parse inline keyboard buttons: [[{text, callback_data?, url?}]]
       let buttons: Array<Array<{ text: string; payload?: string; url?: string }>> | undefined;
       if (params.buttons && Array.isArray(params.buttons)) {
         buttons = (params.buttons as Array<Array<Record<string, unknown>>>).map((row) =>
           (Array.isArray(row) ? row : [row]).map((btn) => ({
-            text: String(btn.text ?? btn.label ?? ""),
-            payload: btn.callback_data ? String(btn.callback_data) : btn.payload ? String(btn.payload) : undefined,
+            text: String(btn.text ?? btn.label ?? ''),
+            payload: btn.callback_data
+              ? String(btn.callback_data)
+              : btn.payload
+                ? String(btn.payload)
+                : undefined,
             url: btn.url ? String(btn.url) : undefined,
-          }))
+          })),
         );
       }
 
@@ -135,7 +154,7 @@ export const maxMessageActions: ChannelMessageActionAdapter = {
       }
 
       // Location sending: if location param contains coords or lat/lng params exist
-      const locationStr = readStringParam(params, "location");
+      const locationStr = readStringParam(params, 'location');
       const latStr = params.latitude != null ? String(params.latitude) : undefined;
       const lngStr = params.longitude != null ? String(params.longitude) : undefined;
       if (locationStr || (latStr && lngStr)) {
@@ -153,28 +172,37 @@ export const maxMessageActions: ChannelMessageActionAdapter = {
           }
         }
         if (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) {
-          const result = await sendMaxLocation(to, { latitude: lat, longitude: lng }, content || undefined, {
-            token: account.token,
-            replyToMessageId: replyTo ?? undefined,
-            format: "markdown",
-          });
+          const result = await sendMaxLocation(
+            to,
+            { latitude: lat, longitude: lng },
+            content || undefined,
+            {
+              token: account.token,
+              replyToMessageId: replyTo ?? undefined,
+              format: 'markdown',
+            },
+          );
           return jsonResult({ ok: true, to, messageId: result.messageId });
         }
       }
 
       // Contact sending: if contactName param exists
-      const contactName = readStringParam(params, "contactName");
+      const contactName = readStringParam(params, 'contactName');
       if (contactName) {
         const contactId = params.contactId != null ? Number(params.contactId) : undefined;
-        const vcfPhone = readStringParam(params, "vcfPhone") ?? readStringParam(params, "phone");
-        const result = await sendMaxContact(to, {
-          name: contactName,
-          contactId: contactId && !isNaN(contactId) ? contactId : undefined,
-          vcfPhone: vcfPhone ?? undefined,
-        }, {
-          token: account.token,
-          replyToMessageId: replyTo ?? undefined,
-        });
+        const vcfPhone = readStringParam(params, 'vcfPhone') ?? readStringParam(params, 'phone');
+        const result = await sendMaxContact(
+          to,
+          {
+            name: contactName,
+            contactId: contactId && !isNaN(contactId) ? contactId : undefined,
+            vcfPhone: vcfPhone ?? undefined,
+          },
+          {
+            token: account.token,
+            replyToMessageId: replyTo ?? undefined,
+          },
+        );
         return jsonResult({ ok: true, to, messageId: result.messageId });
       }
 
@@ -186,20 +214,20 @@ export const maxMessageActions: ChannelMessageActionAdapter = {
         const core = getMaxRuntime();
 
         // Download if URL, otherwise use as local file path
-        if (mediaSource.startsWith("http://") || mediaSource.startsWith("https://")) {
+        if (mediaSource.startsWith('http://') || mediaSource.startsWith('https://')) {
           const maxBytes = (account.config.mediaMaxMb ?? 20) * 1024 * 1024;
           const loaded = await core.channel.media.fetchRemoteMedia({ url: mediaSource, maxBytes });
 
           // Write to temp file
-          const fs = await import("fs/promises");
-          const tmpPath = `/tmp/max-media-${Date.now()}-${loaded.fileName ?? "file"}`;
+          const fs = await import('fs/promises');
+          const tmpPath = `/tmp/max-media-${Date.now()}-${loaded.fileName ?? 'file'}`;
           await fs.writeFile(tmpPath, loaded.buffer);
 
           try {
             const result = await sendMaxMediaMessage(to, content, tmpPath, {
               token: account.token,
               replyToMessageId: replyTo ?? undefined,
-              format: "markdown",
+              format: 'markdown',
             });
             return jsonResult({ ok: true, to, messageId: result.messageId });
           } finally {
@@ -211,7 +239,7 @@ export const maxMessageActions: ChannelMessageActionAdapter = {
           const result = await sendMaxMediaMessage(to, content, mediaSource, {
             token: account.token,
             replyToMessageId: replyTo ?? undefined,
-            format: "markdown",
+            format: 'markdown',
           });
           return jsonResult({ ok: true, to, messageId: result.messageId });
         }
@@ -220,48 +248,48 @@ export const maxMessageActions: ChannelMessageActionAdapter = {
       const result = await sendMaxMessage(to, content, {
         token: account.token,
         replyToMessageId: replyTo ?? undefined,
-        format: "markdown",
+        format: 'markdown',
         buttons,
       });
       return jsonResult({ ok: true, to, messageId: result.messageId });
     }
 
-    if (action === "edit") {
-      const messageId = readStringParam(params, "messageId", { required: true });
-      const text = readStringParam(params, "message", {
+    if (action === 'edit') {
+      const messageId = readStringParam(params, 'messageId', { required: true });
+      const text = readStringParam(params, 'message', {
         required: true,
         allowEmpty: true,
       });
       await editMaxMessage(messageId, text, {
         token: account.token,
-        format: "markdown",
+        format: 'markdown',
       });
       return jsonResult({ ok: true, messageId });
     }
 
-    if (action === "delete") {
-      const messageId = readStringParam(params, "messageId", { required: true });
+    if (action === 'delete') {
+      const messageId = readStringParam(params, 'messageId', { required: true });
       await deleteMaxMessage(messageId, {
         token: account.token,
       });
       return jsonResult({ ok: true, messageId });
     }
 
-    if (action === "sticker") {
+    if (action === 'sticker') {
       const to = stripPrefix(readTargetParam(params))!;
       // stickerId may come as string or string[] from message tool schema
       const rawStickerId = params.stickerId;
       let stickerCode: string | undefined = Array.isArray(rawStickerId)
         ? (rawStickerId[0] as string)?.trim()
-        : readStringParam(params, "stickerId") ?? readStringParam(params, "fileId");
+        : (readStringParam(params, 'stickerId') ?? readStringParam(params, 'fileId'));
       // Auto-fill from last received sticker if not provided
       if (!stickerCode) {
         stickerCode = getLastStickerCode(to) ?? getLastStickerCode() ?? undefined;
       }
       if (!stickerCode) {
-        throw new Error("stickerId is required. Send a sticker first, then ask to send it back.");
+        throw new Error('stickerId is required. Send a sticker first, then ask to send it back.');
       }
-      const replyTo = readStringParam(params, "replyTo");
+      const replyTo = readStringParam(params, 'replyTo');
 
       const result = await sendMaxSticker(to, stickerCode, {
         token: account.token,
@@ -270,27 +298,32 @@ export const maxMessageActions: ChannelMessageActionAdapter = {
       return jsonResult({ ok: true, to, messageId: result.messageId });
     }
 
-    if (action === "sendAttachment") {
+    if (action === 'sendAttachment') {
       const to = stripPrefix(readTargetParam(params))!;
-      const replyTo = readStringParam(params, "replyTo");
+      const replyTo = readStringParam(params, 'replyTo');
       const caption =
-        readStringParam(params, "message") ?? readStringParam(params, "caption") ?? "";
+        readStringParam(params, 'message') ?? readStringParam(params, 'caption') ?? '';
       const attachType =
-        readStringParam(params, "type") ?? readStringParam(params, "attachmentType") ?? "";
+        readStringParam(params, 'type') ?? readStringParam(params, 'attachmentType') ?? '';
       const mediaSource = readMediaSource(params);
 
       if (mediaSource) {
         const result = await sendMaxMediaMessage(to, caption, mediaSource, {
           token: account.token,
           replyToMessageId: replyTo ?? undefined,
-          format: "markdown",
+          format: 'markdown',
         });
         return jsonResult({ ok: true, to, messageId: result.messageId });
       }
 
       // Location attachment
-      if (attachType === "location" || params.latitude != null || params.longitude != null || readStringParam(params, "location")) {
-        const locationStr = readStringParam(params, "location");
+      if (
+        attachType === 'location' ||
+        params.latitude != null ||
+        params.longitude != null ||
+        readStringParam(params, 'location')
+      ) {
+        const locationStr = readStringParam(params, 'location');
         let lat: number | undefined;
         let lng: number | undefined;
         if (params.latitude != null && params.longitude != null) {
@@ -298,35 +331,50 @@ export const maxMessageActions: ChannelMessageActionAdapter = {
           lng = parseFloat(String(params.longitude));
         } else if (locationStr) {
           const m = locationStr.match(/(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)/);
-          if (m) { lat = parseFloat(m[1]); lng = parseFloat(m[2]); }
+          if (m) {
+            lat = parseFloat(m[1]);
+            lng = parseFloat(m[2]);
+          }
         }
         if (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) {
-          const result = await sendMaxLocation(to, { latitude: lat, longitude: lng }, caption || undefined, {
-            token: account.token,
-            replyToMessageId: replyTo ?? undefined,
-          });
+          const result = await sendMaxLocation(
+            to,
+            { latitude: lat, longitude: lng },
+            caption || undefined,
+            {
+              token: account.token,
+              replyToMessageId: replyTo ?? undefined,
+            },
+          );
           return jsonResult({ ok: true, to, messageId: result.messageId });
         }
         throw new Error("Invalid location: provide latitude/longitude or location='LAT,LNG'");
       }
 
       // Contact attachment
-      if (attachType === "contact" || readStringParam(params, "contactName")) {
-        const contactName = readStringParam(params, "contactName") ?? readStringParam(params, "name") ?? "Unknown";
+      if (attachType === 'contact' || readStringParam(params, 'contactName')) {
+        const contactName =
+          readStringParam(params, 'contactName') ?? readStringParam(params, 'name') ?? 'Unknown';
         const contactId = params.contactId != null ? Number(params.contactId) : undefined;
-        const vcfPhone = readStringParam(params, "vcfPhone") ?? readStringParam(params, "phone");
-        const result = await sendMaxContact(to, {
-          name: contactName,
-          contactId: contactId && !isNaN(contactId) ? contactId : undefined,
-          vcfPhone: vcfPhone ?? undefined,
-        }, {
-          token: account.token,
-          replyToMessageId: replyTo ?? undefined,
-        });
+        const vcfPhone = readStringParam(params, 'vcfPhone') ?? readStringParam(params, 'phone');
+        const result = await sendMaxContact(
+          to,
+          {
+            name: contactName,
+            contactId: contactId && !isNaN(contactId) ? contactId : undefined,
+            vcfPhone: vcfPhone ?? undefined,
+          },
+          {
+            token: account.token,
+            replyToMessageId: replyTo ?? undefined,
+          },
+        );
         return jsonResult({ ok: true, to, messageId: result.messageId });
       }
 
-      throw new Error("sendAttachment: unknown type. Use media/filePath for files, or type='location' / type='contact'");
+      throw new Error(
+        "sendAttachment: unknown type. Use media/filePath for files, or type='location' / type='contact'",
+      );
     }
 
     throw new Error(`Action ${action} is not supported for provider ${providerId}.`);

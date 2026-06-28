@@ -5,22 +5,30 @@
  * finalizeInboundContext → dispatchReplyWithBufferedBlockDispatcher
  */
 
-import type { OpenClawConfig } from "openclaw/plugin-sdk/core";
-import type { ChannelLogSink } from "openclaw/plugin-sdk/channel-runtime";
-import { createReplyPrefixOptions } from "openclaw/plugin-sdk/channel-runtime";
-import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-reply-options-runtime";
-import { MaxApi, type MaxUpdate, type MaxMessage, type MaxUser, type MaxCallback } from "./api.js";
-import { resolveMaxAccount, type ResolvedMaxAccount } from "./accounts.js";
-import { answerMaxCallback, sendMaxMessage, sendMaxMediaMessage, editMaxMessage, readMaxChannelButtons } from "./send.js";
-import { getMaxRuntime } from "./runtime.js";
-import { rememberStickerCode } from "./sticker-cache.js";
+import { createTypingCallbacks } from 'openclaw/plugin-sdk/channel-reply-options-runtime';
+import type { ChannelLogSink } from 'openclaw/plugin-sdk/channel-runtime';
+import { createReplyPrefixOptions } from 'openclaw/plugin-sdk/channel-runtime';
+import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
+
+import type { ResolvedMaxAccount } from './accounts.js';
+import type { MaxApi } from './api.js';
+import { type MaxCallback, type MaxMessage, type MaxUpdate, type MaxUser } from './api.js';
+import { getMaxRuntime } from './runtime.js';
 import {
+  answerMaxCallback,
+  editMaxMessage,
+  readMaxChannelButtons,
+  sendMaxMediaMessage,
+  sendMaxMessage,
+} from './send.js';
+import { rememberStickerCode } from './sticker-cache.js';
+import {
+  type MaxWebhookTarget,
   registerMaxWebhookTarget,
   resolveMaxWebhookPath,
   subscribeMaxWebhook,
   unsubscribeMaxWebhook,
-  type MaxWebhookTarget,
-} from "./webhook.js";
+} from './webhook.js';
 
 export interface MaxMonitorOptions {
   api: MaxApi;
@@ -34,8 +42,8 @@ export interface MaxMonitorOptions {
 }
 
 export async function startMaxPolling(opts: MaxMonitorOptions): Promise<void> {
-  const { api, account, config, abortSignal, log, statusSink } = opts;
-  
+  const { account } = opts;
+
   // Check if webhook mode is configured
   const webhookUrl = account.config.webhookUrl?.trim();
   const useWebhook = Boolean(webhookUrl);
@@ -50,7 +58,7 @@ export async function startMaxPolling(opts: MaxMonitorOptions): Promise<void> {
 }
 
 async function startMaxPollingLoop(opts: MaxMonitorOptions): Promise<void> {
-  const { api, account, config, abortSignal, log, statusSink } = opts;
+  const { api, account, abortSignal, log } = opts;
   let marker: number | null = null;
 
   log?.info(`[${account.accountId}] MAX long-polling started`);
@@ -61,15 +69,15 @@ async function startMaxPollingLoop(opts: MaxMonitorOptions): Promise<void> {
         timeout: 30,
         marker: marker ?? undefined,
         types: [
-          "message_created",
-          "message_callback",
-          "message_edited",
-          "message_removed",
-          "message_reaction_created",
-          "message_reaction_updated",
-          "bot_started",
-          "bot_added",
-          "bot_removed",
+          'message_created',
+          'message_callback',
+          'message_edited',
+          'message_removed',
+          'message_reaction_created',
+          'message_reaction_updated',
+          'bot_started',
+          'bot_added',
+          'bot_removed',
         ],
       });
 
@@ -82,7 +90,9 @@ async function startMaxPollingLoop(opts: MaxMonitorOptions): Promise<void> {
         try {
           await dispatchUpdate(update, opts);
         } catch (err) {
-          log?.error(`[${account.accountId}] Error dispatching update ${update.update_type}: ${String(err)}`);
+          log?.error(
+            `[${account.accountId}] Error dispatching update ${update.update_type}: ${String(err)}`,
+          );
         }
       }
     } catch (err) {
@@ -97,12 +107,9 @@ async function startMaxPollingLoop(opts: MaxMonitorOptions): Promise<void> {
 }
 
 async function startMaxWebhook(opts: MaxMonitorOptions & { webhookUrl: string }): Promise<void> {
-  const { api, account, config, abortSignal, log, statusSink, webhookUrl } = opts;
-  
-  const webhookPath = resolveMaxWebhookPath(
-    account.config.webhookPath,
-    account.config.webhookUrl,
-  );
+  const { api, account, config, abortSignal, log, webhookUrl } = opts;
+
+  const webhookPath = resolveMaxWebhookPath(account.config.webhookPath, account.config.webhookUrl);
   const webhookSecret = account.config.webhookSecret?.trim();
 
   log?.info(`[${account.accountId}] MAX webhook mode: ${webhookUrl} (path: ${webhookPath})`);
@@ -166,14 +173,11 @@ async function startMaxWebhook(opts: MaxMonitorOptions & { webhookUrl: string })
 
 // ── Dispatch ──
 
-async function dispatchUpdate(
-  update: MaxUpdate,
-  opts: MaxMonitorOptions,
-): Promise<void> {
+async function dispatchUpdate(update: MaxUpdate, opts: MaxMonitorOptions): Promise<void> {
   const { log, account, statusSink } = opts;
 
   switch (update.update_type) {
-    case "message_created": {
+    case 'message_created': {
       if (!update.message) break;
       // Skip messages from the bot itself
       if (opts.botUserId && update.message.sender?.user_id === opts.botUserId) break;
@@ -181,10 +185,10 @@ async function dispatchUpdate(
       // Mark message as read + show typing indicator
       const chatIdForRead = update.message.recipient?.chat_id;
       if (chatIdForRead) {
-        opts.api.sendAction(chatIdForRead, "mark_seen").catch((err) => {
+        opts.api.sendAction(chatIdForRead, 'mark_seen').catch((err) => {
           log?.debug?.(`[${account.accountId}] mark_seen failed: ${String(err)}`);
         });
-        opts.api.sendAction(chatIdForRead, "typing_on").catch((err) => {
+        opts.api.sendAction(chatIdForRead, 'typing_on').catch((err) => {
           log?.debug?.(`[${account.accountId}] typing_on failed: ${String(err)}`);
         });
       }
@@ -192,26 +196,28 @@ async function dispatchUpdate(
       break;
     }
 
-    case "message_callback": {
+    case 'message_callback': {
       if (!update.callback) break;
       statusSink?.({ lastInboundAt: Date.now() });
       await processCallback(update.callback, opts);
       break;
     }
 
-    case "message_edited": {
+    case 'message_edited': {
       if (!update.message) break;
       // Skip edits from the bot itself
       if (opts.botUserId && update.message.sender?.user_id === opts.botUserId) break;
-      log?.debug?.(`[${account.accountId}] Message edited: ${update.message?.body?.mid} text="${update.message?.body?.text ?? "<null>"}" hasBody=${!!update.message?.body}`);
+      log?.debug?.(
+        `[${account.accountId}] Message edited: ${update.message?.body?.mid} text="${update.message?.body?.text ?? '<null>'}" hasBody=${!!update.message?.body}`,
+      );
       statusSink?.({ lastInboundAt: Date.now() });
       // Mark as read + show typing indicator
       const chatIdForEditRead = update.message.recipient?.chat_id;
       if (chatIdForEditRead) {
-        opts.api.sendAction(chatIdForEditRead, "mark_seen").catch((err) => {
+        opts.api.sendAction(chatIdForEditRead, 'mark_seen').catch((err) => {
           log?.debug?.(`[${account.accountId}] mark_seen failed: ${String(err)}`);
         });
-        opts.api.sendAction(chatIdForEditRead, "typing_on").catch((err) => {
+        opts.api.sendAction(chatIdForEditRead, 'typing_on').catch((err) => {
           log?.debug?.(`[${account.accountId}] typing_on failed: ${String(err)}`);
         });
       }
@@ -229,18 +235,25 @@ async function dispatchUpdate(
         try {
           const chatId = editedMessage.recipient?.chat_id;
           if (chatId) {
-            const fetched = await opts.api.getMessages(chatId, { message_ids: [originalMid], count: 1 });
+            const fetched = await opts.api.getMessages(chatId, {
+              message_ids: [originalMid],
+              count: 1,
+            });
             const fetchedMsg = fetched.messages?.[0];
             if (fetchedMsg?.body?.text) {
               editedMessage.body = { ...editedMessage.body, text: fetchedMsg.body.text };
               if (fetchedMsg.body.attachments?.length) {
                 editedMessage.body.attachments = fetchedMsg.body.attachments;
               }
-              log?.debug?.(`[${account.accountId}] Fetched edited text: "${fetchedMsg.body.text.slice(0, 50)}"`);
+              log?.debug?.(
+                `[${account.accountId}] Fetched edited text: "${fetchedMsg.body.text.slice(0, 50)}"`,
+              );
             }
           }
         } catch (err) {
-          log?.debug?.(`[${account.accountId}] Failed to fetch edited message text: ${String(err)}`);
+          log?.debug?.(
+            `[${account.accountId}] Failed to fetch edited message text: ${String(err)}`,
+          );
         }
       }
 
@@ -248,7 +261,7 @@ async function dispatchUpdate(
       break;
     }
 
-    case "bot_started": {
+    case 'bot_started': {
       if (!update.user) break;
       log?.info(`[${account.accountId}] Bot started by user ${update.user.user_id}`);
       statusSink?.({ lastInboundAt: Date.now() });
@@ -256,12 +269,12 @@ async function dispatchUpdate(
       break;
     }
 
-    case "bot_added": {
+    case 'bot_added': {
       log?.info(`[${account.accountId}] Bot added to chat ${update.chat_id}`);
       break;
     }
 
-    case "bot_removed": {
+    case 'bot_removed': {
       log?.info(`[${account.accountId}] Bot removed from chat ${update.chat_id}`);
       break;
     }
@@ -292,14 +305,17 @@ export async function processIncomingMessage(
   // Determine chat type and IDs
   const chatId = message.recipient.chat_id;
   const chatType = message.recipient.chat_type; // "dialog", "chat", "channel"
-  const isGroup = chatType === "chat" || chatType === "channel";
+  const isGroup = chatType === 'chat' || chatType === 'channel';
 
-  const rawText = message.body.text ?? "";
+  const rawText = message.body.text ?? '';
   const messageId = message.body.mid;
-  const isCallbackCommand = (message as MaxMessage & { __maxCallback?: boolean }).__maxCallback === true;
+  const isCallbackCommand =
+    (message as MaxMessage & { __maxCallback?: boolean }).__maxCallback === true;
   const attachments = message.body.attachments ?? [];
 
-  log?.debug?.(`[${account.accountId}] Processing message: mid=${messageId} chatId=${message.recipient.chat_id} chatType=${message.recipient.chat_type} senderId=${message.sender?.user_id} text="${rawText.slice(0, 50)}" attachments=${attachments.length}`);
+  log?.debug?.(
+    `[${account.accountId}] Processing message: mid=${messageId} chatId=${message.recipient.chat_id} chatType=${message.recipient.chat_type} senderId=${message.sender?.user_id} text="${rawText.slice(0, 50)}" attachments=${attachments.length}`,
+  );
 
   // Process attachments: download media, build descriptions for non-downloadable types
   const attachmentDescriptions: string[] = [];
@@ -308,13 +324,13 @@ export async function processIncomingMessage(
   const mediaTypes: string[] = [];
 
   for (const att of attachments) {
-    const attType = att.type ?? "unknown";
+    const attType = att.type ?? 'unknown';
     const payload = att.payload as Record<string, unknown> | undefined;
 
     // Media types with downloadable URL: image, sticker, video, audio, file
-    if (["image", "sticker", "video", "audio", "file"].includes(attType)) {
+    if (['image', 'sticker', 'video', 'audio', 'file'].includes(attType)) {
       // For stickers, always capture the code for outbound use
-      const stickerCode = attType === "sticker" ? ((payload?.code ?? "") as string) : "";
+      const stickerCode = attType === 'sticker' ? ((payload?.code ?? '') as string) : '';
       if (stickerCode) {
         log?.debug?.(`[${account.accountId}] Sticker received: code=${stickerCode}`);
         attachmentDescriptions.push(`[Sticker: code=${stickerCode}]`);
@@ -323,15 +339,15 @@ export async function processIncomingMessage(
         }
       }
 
-      const url = (payload?.url ?? (att as Record<string, unknown>).url ?? "") as string;
-      if (url && typeof url === "string" && url.startsWith("http")) {
+      const url = (payload?.url ?? (att as Record<string, unknown>).url ?? '') as string;
+      if (url && typeof url === 'string' && url.startsWith('http')) {
         try {
           const maxBytes = (account.config.mediaMaxMb ?? 20) * 1024 * 1024;
           const fetched = await core.channel.media.fetchRemoteMedia({ url, maxBytes });
           const saved = await core.channel.media.saveMediaBuffer(
             Buffer.from(fetched.buffer),
             fetched.contentType,
-            "inbound",
+            'inbound',
             maxBytes,
             fetched.fileName,
           );
@@ -341,38 +357,38 @@ export async function processIncomingMessage(
         } catch (err) {
           log?.error?.(`[${account.accountId}] Failed to download ${attType}: ${String(err)}`);
           // Fall back to text description (sticker code already added above)
-          if (attType !== "sticker") {
+          if (attType !== 'sticker') {
             attachmentDescriptions.push(`[${attType}: ${url}]`);
           }
         }
       } else {
         // No URL — text description
-        if (attType === "sticker") {
-          const code = payload?.code ?? "";
-          attachmentDescriptions.push(`[Sticker${code ? `: ${code}` : ""}]`);
-        } else if (attType === "file") {
-          const filename = (att as Record<string, unknown>).filename ?? payload?.filename ?? "";
-          attachmentDescriptions.push(`[File${filename ? `: ${filename}` : ""}]`);
+        if (attType === 'sticker') {
+          const code = payload?.code ?? '';
+          attachmentDescriptions.push(`[Sticker${code ? `: ${code}` : ''}]`);
+        } else if (attType === 'file') {
+          const filename = (att as Record<string, unknown>).filename ?? payload?.filename ?? '';
+          attachmentDescriptions.push(`[File${filename ? `: ${filename}` : ''}]`);
         } else {
           attachmentDescriptions.push(`[${attType}]`);
         }
       }
-    } else if (attType === "share") {
-      const url = (payload?.url ?? (att as Record<string, unknown>).url ?? "") as string;
-      attachmentDescriptions.push(`[Share${url ? `: ${url}` : ""}]`);
-    } else if (attType === "location") {
-      const lat = (att as Record<string, unknown>).latitude ?? payload?.latitude ?? "";
-      const lon = (att as Record<string, unknown>).longitude ?? payload?.longitude ?? "";
+    } else if (attType === 'share') {
+      const url = (payload?.url ?? (att as Record<string, unknown>).url ?? '') as string;
+      attachmentDescriptions.push(`[Share${url ? `: ${url}` : ''}]`);
+    } else if (attType === 'location') {
+      const lat = (att as Record<string, unknown>).latitude ?? payload?.latitude ?? '';
+      const lon = (att as Record<string, unknown>).longitude ?? payload?.longitude ?? '';
       attachmentDescriptions.push(`[Location: ${lat}, ${lon}]`);
-    } else if (attType === "contact") {
-      const name = payload?.name ?? payload?.vcf_info ?? "";
-      attachmentDescriptions.push(`[Contact${name ? `: ${name}` : ""}]`);
-    } else if (attType !== "inline_keyboard") {
+    } else if (attType === 'contact') {
+      const name = payload?.name ?? payload?.vcf_info ?? '';
+      attachmentDescriptions.push(`[Contact${name ? `: ${name}` : ''}]`);
+    } else if (attType !== 'inline_keyboard') {
       attachmentDescriptions.push(`[${attType}]`);
     }
   }
 
-  const attachmentText = attachmentDescriptions.join(" ");
+  const attachmentText = attachmentDescriptions.join(' ');
   const hasMedia = mediaPaths.length > 0;
   const effectiveText = rawText.trim() || attachmentText;
 
@@ -380,18 +396,18 @@ export async function processIncomingMessage(
   if (!effectiveText && !hasMedia) return;
 
   // Check for reply context
-  const replyToId = message.link?.type === "reply" ? message.link.message?.body?.mid : undefined;
+  const replyToId = message.link?.type === 'reply' ? message.link.message?.body?.mid : undefined;
 
   // Check for bot mention in group chats
   let wasMentioned: boolean | undefined;
   if (isGroup && opts.botUsername) {
     // MAX doesn't have annotation-based mentions like Google Chat,
     // so we check if the text contains @botname
-    const mentionPattern = new RegExp(`@${opts.botUsername}\\b`, "i");
+    const mentionPattern = new RegExp(`@${opts.botUsername}\\b`, 'i');
     wasMentioned = mentionPattern.test(rawText);
 
     // Reply to bot's message also counts as mention (like Telegram behavior)
-    if (!wasMentioned && message.link?.type === "reply") {
+    if (!wasMentioned && message.link?.type === 'reply') {
       const replySender = message.link.sender;
       if (replySender?.is_bot && replySender?.user_id === opts.botUserId) {
         wasMentioned = true;
@@ -402,24 +418,26 @@ export async function processIncomingMessage(
 
   // DM security: check pairing/allowlist
   if (!isGroup) {
-    const dmPolicy = account.config.dmPolicy ?? "pairing";
-    if (dmPolicy === "disabled") {
+    const dmPolicy = account.config.dmPolicy ?? 'pairing';
+    if (dmPolicy === 'disabled') {
       log?.debug?.(`[${account.accountId}] Blocked DM from ${senderId} (dmPolicy=disabled)`);
       return;
     }
 
-    if (dmPolicy !== "open") {
+    if (dmPolicy !== 'open') {
       const configAllowFrom = (account.config.allowFrom ?? []).map(String);
-      const storeAllowFrom = await core.channel.pairing.readAllowFromStore({ channel: "max", accountId: account.accountId }).catch(() => []);
+      const storeAllowFrom = await core.channel.pairing
+        .readAllowFromStore({ channel: 'max', accountId: account.accountId })
+        .catch(() => []);
       const effectiveAllowFrom = [...configAllowFrom, ...storeAllowFrom];
 
       const senderStr = String(senderId);
-      const allowed = effectiveAllowFrom.includes(senderStr) || effectiveAllowFrom.includes("*");
+      const allowed = effectiveAllowFrom.includes(senderStr) || effectiveAllowFrom.includes('*');
 
       if (!allowed) {
-        if (dmPolicy === "pairing") {
+        if (dmPolicy === 'pairing') {
           const { code, created } = await core.channel.pairing.upsertPairingRequest({
-            channel: "max",
+            channel: 'max',
             id: senderStr,
             accountId: account.accountId,
             meta: { name: senderName },
@@ -428,7 +446,7 @@ export async function processIncomingMessage(
             log?.info(`[${account.accountId}] Pairing request from ${senderStr}`);
             try {
               const pairingReply = core.channel.pairing.buildPairingReply({
-                channel: "max",
+                channel: 'max',
                 idLine: `Your MAX user id: ${senderStr}`,
                 code,
               });
@@ -449,27 +467,29 @@ export async function processIncomingMessage(
   // Group policy
   if (isGroup) {
     const defaultGroupPolicy = config.channels?.defaults?.groupPolicy;
-    const groupPolicy = account.config.groupPolicy ?? defaultGroupPolicy ?? "allowlist";
+    const groupPolicy = account.config.groupPolicy ?? defaultGroupPolicy ?? 'allowlist';
 
-    if (groupPolicy === "disabled") {
+    if (groupPolicy === 'disabled') {
       log?.debug?.(`[${account.accountId}] Blocked group message (groupPolicy=disabled)`);
       return;
     }
 
     // For allowlist policy, check if chat is in the groups config
-    if (groupPolicy === "allowlist") {
+    if (groupPolicy === 'allowlist') {
       const groups = account.config.groups ?? {};
       const chatIdStr = String(chatId);
-      const hasWildcard = "*" in groups;
+      const hasWildcard = '*' in groups;
       const chatAllowed = chatIdStr in groups || hasWildcard;
       if (!chatAllowed) {
-        log?.debug?.(`[${account.accountId}] Blocked group message (not in allowlist, chat=${chatIdStr})`);
+        log?.debug?.(
+          `[${account.accountId}] Blocked group message (not in allowlist, chat=${chatIdStr})`,
+        );
         return;
       }
     }
 
     // Require mention in groups
-    const groupCfg = account.config.groups?.[String(chatId)] ?? account.config.groups?.["*"];
+    const groupCfg = account.config.groups?.[String(chatId)] ?? account.config.groups?.['*'];
     const requireMention = groupCfg?.requireMention ?? true;
     if (requireMention && !wasMentioned) {
       log?.debug?.(`[${account.accountId}] Skipping group message (not mentioned)`);
@@ -481,18 +501,16 @@ export async function processIncomingMessage(
   const chatIdStr = String(chatId ?? senderId);
   const route = core.channel.routing.resolveAgentRoute({
     cfg: config,
-    channel: "max",
+    channel: 'max',
     accountId: account.accountId,
     peer: {
-      kind: isGroup ? "group" : "direct",
+      kind: isGroup ? 'group' : 'direct',
       id: chatIdStr,
     },
   });
 
   // Build context
-  const fromLabel = isGroup
-    ? `chat:${chatIdStr}`
-    : senderName || `user:${senderId}`;
+  const fromLabel = isGroup ? `chat:${chatIdStr}` : senderName || `user:${senderId}`;
 
   const storePath = core.channel.session.resolveStorePath(config.session?.store, {
     agentId: route.agentId,
@@ -511,7 +529,7 @@ export async function processIncomingMessage(
     : rawText;
 
   const body = core.channel.reply.formatAgentEnvelope({
-    channel: "MAX",
+    channel: 'MAX',
     from: fromLabel,
     timestamp: message.timestamp,
     previousTimestamp,
@@ -520,8 +538,8 @@ export async function processIncomingMessage(
   });
 
   // Detect text-slash commands (user types /status, /models, /reasoning etc.)
-  const rawTextTrimmed = (rawText || "").trim();
-  const isTextSlashCommand = rawTextTrimmed.startsWith("/");
+  const rawTextTrimmed = (rawText || '').trim();
+  const isTextSlashCommand = rawTextTrimmed.startsWith('/');
 
   const ctxPayload = core.channel.reply.finalizeInboundContext({
     Body: body,
@@ -532,19 +550,19 @@ export async function processIncomingMessage(
     To: `max:${chatIdStr}`,
     SessionKey: route.sessionKey,
     AccountId: route.accountId,
-    ChatType: isGroup ? "group" : "direct",
+    ChatType: isGroup ? 'group' : 'direct',
     ConversationLabel: fromLabel,
     SenderName: senderName || undefined,
     SenderId: senderId != null ? String(senderId) : undefined,
     SenderUsername: senderUsername,
     WasMentioned: isGroup ? wasMentioned : undefined,
-    Provider: "max",
-    Surface: "max",
+    Provider: 'max',
+    Surface: 'max',
     MessageSid: messageId,
     MessageSidFull: messageId,
     ReplyToId: replyToId,
     ReplyToIdFull: replyToId,
-    OriginatingChannel: "max",
+    OriginatingChannel: 'max',
     OriginatingTo: `max:${chatIdStr}`,
     // Media attachments (downloaded to local paths)
     MediaPath: mediaPaths[0],
@@ -555,15 +573,17 @@ export async function processIncomingMessage(
     MediaTypes: mediaTypes.length > 0 ? mediaTypes : undefined,
     // Text-slash command detection: treat /status, /models etc. as text commands
     // so OpenClaw routes them through handleCommands instead of silently dropping
-    ...(isTextSlashCommand ? {
-      CommandSource: "text" as const,
-      CommandTurn: {
-        kind: "text-slash" as const,
-        source: "text" as const,
-        authorized: undefined, // let allowFrom resolve authorization
-        body: rawTextTrimmed,
-      },
-    } : {}),
+    ...(isTextSlashCommand
+      ? {
+          CommandSource: 'text' as const,
+          CommandTurn: {
+            kind: 'text-slash' as const,
+            source: 'text' as const,
+            authorized: undefined, // let allowFrom resolve authorization
+            body: rawTextTrimmed,
+          },
+        }
+      : {}),
   });
 
   // Record session meta
@@ -581,7 +601,7 @@ export async function processIncomingMessage(
   const { onModelSelected, ...prefixOptions } = createReplyPrefixOptions({
     cfg: config,
     agentId: route.agentId,
-    channel: "max",
+    channel: 'max',
     accountId: route.accountId,
   });
 
@@ -593,7 +613,7 @@ export async function processIncomingMessage(
     chatId != null
       ? createTypingCallbacks({
           start: async () => {
-            await opts.api.sendAction(chatId, "typing_on");
+            await opts.api.sendAction(chatId, 'typing_on');
           },
           onStartError: (err) => {
             log?.debug?.(`[${account.accountId}] typing_on failed: ${String(err)}`);
@@ -602,15 +622,15 @@ export async function processIncomingMessage(
       : undefined;
 
   // Streaming modes: "partial" = edit single message, "block" = each block as separate message
-  const streamMode = account.config.streamMode ?? "off";
-  const useEditStreaming = streamMode === "partial";
-  const useBlockStreaming = streamMode === "block";
-  const replyMid = isCallbackCommand ? undefined : messageId.replace(/_edited_\d+$/, "");
+  const streamMode = account.config.streamMode ?? 'off';
+  const useEditStreaming = streamMode === 'partial';
+  const useBlockStreaming = streamMode === 'block';
+  const replyMid = isCallbackCommand ? undefined : messageId.replace(/_edited_\d+$/, '');
   const callbackId = isCallbackCommand ? messageId : undefined;
 
   // Draft stream for edit-streaming (like Telegram's partial reply approach)
   let draftMid: string | null = null;
-  let draftLastText = "";
+  let draftLastText = '';
   let draftLastEditAt = 0;
   let draftTimer: ReturnType<typeof setTimeout> | null = null;
   let draftStopped = false;
@@ -629,13 +649,18 @@ export async function processIncomingMessage(
     if (!draftMid && trimmed.length < DRAFT_MIN_CHARS) return; // wait for more text
 
     // Clear pending timer
-    if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
+    if (draftTimer) {
+      clearTimeout(draftTimer);
+      draftTimer = null;
+    }
 
     const now = Date.now();
     const elapsed = now - draftLastEditAt;
     if (elapsed < DRAFT_THROTTLE_MS) {
       // Schedule a deferred update
-      draftTimer = setTimeout(() => { draftUpdate(text); }, DRAFT_THROTTLE_MS - elapsed);
+      draftTimer = setTimeout(() => {
+        draftUpdate(text);
+      }, DRAFT_THROTTLE_MS - elapsed);
       return;
     }
 
@@ -648,7 +673,7 @@ export async function processIncomingMessage(
         const res = await sendMaxMessage(chatIdStr, trimmed, {
           token: account.token,
           replyToMessageId: replyMid,
-          format: "markdown",
+          format: 'markdown',
         });
         draftMid = res.messageId || null;
         statusSink?.({ lastOutboundAt: Date.now() });
@@ -656,7 +681,7 @@ export async function processIncomingMessage(
         // Edit existing message
         await editMaxMessage(draftMid, trimmed, {
           token: account.token,
-          format: "markdown",
+          format: 'markdown',
         });
       }
     } catch (err) {
@@ -665,14 +690,11 @@ export async function processIncomingMessage(
     }
   };
 
-  const draftFlush = async () => {
-    if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
-    if (!draftLastText) return;
-    // no-op if nothing changed
-  };
-
   const draftClear = async () => {
-    if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
+    if (draftTimer) {
+      clearTimeout(draftTimer);
+      draftTimer = null;
+    }
     draftStopped = true;
   };
 
@@ -690,10 +712,12 @@ export async function processIncomingMessage(
             try {
               await editMaxMessage(draftMid, finalText, {
                 token: account.token,
-                format: "markdown",
+                format: 'markdown',
               });
               draftLastText = finalText;
-            } catch (_) { /* best effort */ }
+            } catch {
+              /* best effort */
+            }
           }
           draftStopped = true;
 
@@ -731,11 +755,13 @@ export async function processIncomingMessage(
     },
     replyOptions: {
       onModelSelected,
-      ...(useEditStreaming ? {
-        onPartialReply: (payload: { text?: string }) => {
-          if (payload.text) draftUpdate(payload.text);
-        },
-      } : {}),
+      ...(useEditStreaming
+        ? {
+            onPartialReply: (payload: { text?: string }) => {
+              if (payload.text) draftUpdate(payload.text);
+            },
+          }
+        : {}),
       ...(useBlockStreaming ? { disableBlockStreaming: false } : {}),
     },
   });
@@ -744,11 +770,8 @@ export async function processIncomingMessage(
   await draftClear();
 }
 
-async function processCallback(
-  callback: MaxCallback,
-  opts: MaxMonitorOptions,
-): Promise<void> {
-  const payload = callback.payload ?? "";
+async function processCallback(callback: MaxCallback, opts: MaxMonitorOptions): Promise<void> {
+  const payload = callback.payload ?? '';
   if (!payload.trim()) return;
 
   // Synthesize as a regular message. callback_id is not a valid MAX message id,
@@ -775,11 +798,11 @@ async function processBotStarted(
   // Synthesize a /start message
   const syntheticMessage: MaxMessage = {
     sender: user,
-    recipient: { chat_id: chatId ?? user.user_id, chat_type: "dialog" },
+    recipient: { chat_id: chatId ?? user.user_id, chat_type: 'dialog' },
     timestamp: Date.now(),
     body: {
       mid: `bot_started_${user.user_id}_${Date.now()}`,
-      text: "/start",
+      text: '/start',
     },
   };
 
@@ -789,7 +812,13 @@ async function processBotStarted(
 // ── Deliver reply ──
 
 async function deliverMaxReply(params: {
-  payload: { text?: string; mediaUrls?: string[]; mediaUrl?: string; replyToId?: string; channelData?: unknown };
+  payload: {
+    text?: string;
+    mediaUrls?: string[];
+    mediaUrl?: string;
+    replyToId?: string;
+    channelData?: unknown;
+  };
   account: ResolvedMaxAccount;
   chatId: string;
   replyToId?: string;
@@ -804,22 +833,24 @@ async function deliverMaxReply(params: {
 
   if (params.callbackId && (payload.text || buttons?.length)) {
     try {
-      await answerMaxCallback(params.callbackId, payload.text ?? "", {
+      await answerMaxCallback(params.callbackId, payload.text ?? '', {
         token: account.token,
-        format: "markdown",
+        format: 'markdown',
         buttons,
       });
       statusSink?.({ lastOutboundAt: Date.now() });
     } catch (err: unknown) {
       const body = (err as { body?: unknown })?.body;
-      log?.error(`[${account.accountId}] MAX callback answer failed: ${String(err)}${body ? ` body=${JSON.stringify(body)}` : ""}`);
+      log?.error(
+        `[${account.accountId}] MAX callback answer failed: ${String(err)}${body ? ` body=${JSON.stringify(body)}` : ''}`,
+      );
     }
     return;
   }
 
   if (payload.text) {
     const chunkLimit = 4000; // MAX message limit
-    const chunkMode = core.channel.text.resolveChunkMode(config, "max", account.accountId);
+    const chunkMode = core.channel.text.resolveChunkMode(config, 'max', account.accountId);
     const chunks = core.channel.text.chunkMarkdownTextWithMode(payload.text, chunkLimit, chunkMode);
 
     for (let index = 0; index < chunks.length; index += 1) {
@@ -828,27 +859,31 @@ async function deliverMaxReply(params: {
         await sendMaxMessage(chatId, chunk, {
           token: account.token,
           replyToMessageId: params.replyToId,
-          format: "markdown",
+          format: 'markdown',
           buttons: index === chunks.length - 1 ? buttons : undefined,
         });
         statusSink?.({ lastOutboundAt: Date.now() });
       } catch (err: unknown) {
         const body = (err as { body?: unknown })?.body;
-        log?.error(`[${account.accountId}] MAX send failed: ${String(err)}${body ? ` body=${JSON.stringify(body)}` : ""}`);
+        log?.error(
+          `[${account.accountId}] MAX send failed: ${String(err)}${body ? ` body=${JSON.stringify(body)}` : ''}`,
+        );
       }
     }
   } else if (buttons?.length) {
     try {
-      await sendMaxMessage(chatId, "", {
+      await sendMaxMessage(chatId, '', {
         token: account.token,
         replyToMessageId: params.replyToId,
-        format: "markdown",
+        format: 'markdown',
         buttons,
       });
       statusSink?.({ lastOutboundAt: Date.now() });
     } catch (err: unknown) {
       const body = (err as { body?: unknown })?.body;
-      log?.error(`[${account.accountId}] MAX send failed: ${String(err)}${body ? ` body=${JSON.stringify(body)}` : ""}`);
+      log?.error(
+        `[${account.accountId}] MAX send failed: ${String(err)}${body ? ` body=${JSON.stringify(body)}` : ''}`,
+      );
     }
   }
 
@@ -862,17 +897,17 @@ async function deliverMaxReply(params: {
   for (const mediaUrl of mediaList) {
     try {
       // Download media first if it's a URL
-      if (mediaUrl.startsWith("http://") || mediaUrl.startsWith("https://")) {
+      if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
         const maxBytes = (account.config.mediaMaxMb ?? 20) * 1024 * 1024;
         const loaded = await core.channel.media.fetchRemoteMedia({ url: mediaUrl, maxBytes });
-        
+
         // Write to temp file
-        const fs = await import("fs/promises");
-        const tmpPath = `/tmp/max-media-${Date.now()}-${loaded.fileName ?? "file"}`;
+        const fs = await import('fs/promises');
+        const tmpPath = `/tmp/max-media-${Date.now()}-${loaded.fileName ?? 'file'}`;
         await fs.writeFile(tmpPath, loaded.buffer);
-        
+
         try {
-          await sendMaxMediaMessage(chatId, "", tmpPath, {
+          await sendMaxMediaMessage(chatId, '', tmpPath, {
             token: account.token,
             replyToMessageId: params.replyToId,
           });
@@ -883,7 +918,7 @@ async function deliverMaxReply(params: {
         }
       } else {
         // Local file path
-        await sendMaxMediaMessage(chatId, "", mediaUrl, {
+        await sendMaxMediaMessage(chatId, '', mediaUrl, {
           token: account.token,
           replyToMessageId: params.replyToId,
         });
@@ -898,10 +933,10 @@ async function deliverMaxReply(params: {
 // ── Helpers ──
 
 function formatSenderName(user?: MaxUser | null): string {
-  if (!user) return "Unknown";
+  if (!user) return 'Unknown';
   const parts = [user.first_name];
   if (user.last_name) parts.push(user.last_name);
-  return parts.join(" ") || user.username || `user_${user.user_id}`;
+  return parts.join(' ') || user.username || `user_${user.user_id}`;
 }
 
 function sleep(ms: number): Promise<void> {

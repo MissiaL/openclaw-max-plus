@@ -2,8 +2,8 @@
  * MAX account resolution — reads config and produces a resolved account object.
  */
 
-import type { OpenClawConfig } from "openclaw/plugin-sdk/core";
-import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "openclaw/plugin-sdk/core";
+import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
+import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from 'openclaw/plugin-sdk/core';
 
 export interface MaxAccountConfig {
   enabled?: boolean;
@@ -19,7 +19,7 @@ export interface MaxAccountConfig {
   webhookSecret?: string;
   webhookPath?: string;
   mediaMaxMb?: number;
-  streamMode?: "off" | "partial" | "block";
+  streamMode?: 'off' | 'partial' | 'block';
 }
 
 export interface ResolvedMaxAccount {
@@ -27,7 +27,7 @@ export interface ResolvedMaxAccount {
   name?: string;
   enabled: boolean;
   token: string;
-  tokenSource: "config" | "env" | "file" | "none";
+  tokenSource: 'config' | 'env' | 'file' | 'none';
   config: MaxAccountConfig;
 }
 
@@ -72,7 +72,7 @@ export function listMaxAccountIds(cfg: OpenClawConfig): string[] {
 /**
  * Resolve the default account ID.
  */
-export function resolveDefaultMaxAccountId(cfg: OpenClawConfig): string {
+export function resolveDefaultMaxAccountId(_cfg: OpenClawConfig): string {
   return DEFAULT_ACCOUNT_ID;
 }
 
@@ -89,8 +89,8 @@ export function resolveMaxAccount(params: {
   const accounts = section.accounts as Record<string, Record<string, unknown>> | undefined;
 
   let accountConfig: MaxAccountConfig;
-  let token = "";
-  let tokenSource: ResolvedMaxAccount["tokenSource"] = "none";
+  let token = '';
+  let tokenSource: ResolvedMaxAccount['tokenSource'] = 'none';
 
   if (accountId === DEFAULT_ACCOUNT_ID) {
     // Default account: top-level config
@@ -101,22 +101,22 @@ export function resolveMaxAccount(params: {
       name: section.name as string | undefined,
       dmPolicy: section.dmPolicy as string | undefined,
       allowFrom: section.allowFrom as Array<string | number> | undefined,
-      groups: section.groups as MaxAccountConfig["groups"],
+      groups: section.groups as MaxAccountConfig['groups'],
       groupPolicy: section.groupPolicy as string | undefined,
       groupAllowFrom: section.groupAllowFrom as Array<string | number> | undefined,
       webhookUrl: section.webhookUrl as string | undefined,
       webhookSecret: section.webhookSecret as string | undefined,
       webhookPath: section.webhookPath as string | undefined,
       mediaMaxMb: section.mediaMaxMb as number | undefined,
-      streamMode: section.streamMode as MaxAccountConfig["streamMode"],
+      streamMode: section.streamMode as MaxAccountConfig['streamMode'],
     };
 
     if (accountConfig.botToken?.trim()) {
       token = accountConfig.botToken.trim();
-      tokenSource = "config";
+      tokenSource = 'config';
     } else if (process.env.MAX_BOT_TOKEN?.trim()) {
       token = process.env.MAX_BOT_TOKEN.trim();
-      tokenSource = "env";
+      tokenSource = 'env';
     }
   } else {
     // Named account
@@ -127,19 +127,19 @@ export function resolveMaxAccount(params: {
       name: raw.name as string | undefined,
       dmPolicy: raw.dmPolicy as string | undefined,
       allowFrom: raw.allowFrom as Array<string | number> | undefined,
-      groups: raw.groups as MaxAccountConfig["groups"],
+      groups: raw.groups as MaxAccountConfig['groups'],
       groupPolicy: raw.groupPolicy as string | undefined,
       groupAllowFrom: raw.groupAllowFrom as Array<string | number> | undefined,
       webhookUrl: raw.webhookUrl as string | undefined,
       webhookSecret: raw.webhookSecret as string | undefined,
       webhookPath: raw.webhookPath as string | undefined,
       mediaMaxMb: raw.mediaMaxMb as number | undefined,
-      streamMode: raw.streamMode as MaxAccountConfig["streamMode"],
+      streamMode: raw.streamMode as MaxAccountConfig['streamMode'],
     };
 
     if (accountConfig.botToken?.trim()) {
       token = accountConfig.botToken.trim();
-      tokenSource = "config";
+      tokenSource = 'config';
     }
   }
 

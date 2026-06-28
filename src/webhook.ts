@@ -2,13 +2,15 @@
  * MAX webhook handler — HTTP endpoint for receiving webhook updates
  */
 
-import type { IncomingMessage, ServerResponse } from "node:http";
-import type { OpenClawConfig } from "openclaw/plugin-sdk/core";
-import { readJsonBodyWithLimit } from "openclaw/plugin-sdk/infra-runtime";
-import { requestBodyErrorToText } from "openclaw/plugin-sdk/webhook-ingress";
-import type { MaxUpdate } from "./api.js";
-import type { ResolvedMaxAccount } from "./accounts.js";
-import { MaxApi } from "./api.js";
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
+import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
+import { readJsonBodyWithLimit } from 'openclaw/plugin-sdk/infra-runtime';
+import { requestBodyErrorToText } from 'openclaw/plugin-sdk/webhook-ingress';
+
+import type { ResolvedMaxAccount } from './accounts.js';
+import type { MaxUpdate } from './api.js';
+import type { MaxApi } from './api.js';
 
 export type MaxWebhookTarget = {
   account: ResolvedMaxAccount;
@@ -24,9 +26,9 @@ const webhookTargets = new Map<string, MaxWebhookTarget[]>();
 
 function normalizeWebhookPath(raw: string): string {
   const trimmed = raw.trim();
-  if (!trimmed) return "/";
-  const withSlash = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-  if (withSlash.length > 1 && withSlash.endsWith("/")) {
+  if (!trimmed) return '/';
+  const withSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  if (withSlash.length > 1 && withSlash.endsWith('/')) {
     return withSlash.slice(0, -1);
   }
   return withSlash;
@@ -40,12 +42,12 @@ export function resolveMaxWebhookPath(webhookPath?: string, webhookUrl?: string)
   if (webhookUrl?.trim()) {
     try {
       const parsed = new URL(webhookUrl);
-      return normalizeWebhookPath(parsed.pathname || "/");
+      return normalizeWebhookPath(parsed.pathname || '/');
     } catch {
-      return "/max";
+      return '/max';
     }
   }
-  return "/max";
+  return '/max';
 }
 
 export function registerMaxWebhookTarget(target: MaxWebhookTarget): () => void {
@@ -54,7 +56,7 @@ export function registerMaxWebhookTarget(target: MaxWebhookTarget): () => void {
   const existing = webhookTargets.get(key) ?? [];
   const next = [...existing, normalizedTarget];
   webhookTargets.set(key, next);
-  
+
   return () => {
     const updated = (webhookTargets.get(key) ?? []).filter((entry) => entry !== normalizedTarget);
     if (updated.length > 0) {
@@ -69,45 +71,45 @@ export async function handleMaxWebhookRequest(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<boolean> {
-  const url = new URL(req.url ?? "/", "http://localhost");
+  const url = new URL(req.url ?? '/', 'http://localhost');
   const path = normalizeWebhookPath(url.pathname);
   const targets = webhookTargets.get(path);
-  
+
   if (!targets || targets.length === 0) {
     return false;
   }
 
-  if (req.method !== "POST") {
+  if (req.method !== 'POST') {
     res.statusCode = 405;
-    res.setHeader("Allow", "POST");
-    res.end("Method Not Allowed");
+    res.setHeader('Allow', 'POST');
+    res.end('Method Not Allowed');
     return true;
   }
 
   // Verify webhook secret
-  const webhookSecret = String(req.headers["x-max-bot-api-secret"] ?? "");
-  
+  const webhookSecret = String(req.headers['x-max-bot-api-secret'] ?? '');
+
   const body = await readJsonBodyWithLimit(req, {
     maxBytes: 1024 * 1024,
     timeoutMs: 30_000,
     emptyObjectOnEmpty: false,
   });
-  
+
   if (!body.ok) {
     res.statusCode =
-      body.code === "PAYLOAD_TOO_LARGE" ? 413 : body.code === "REQUEST_BODY_TIMEOUT" ? 408 : 400;
+      body.code === 'PAYLOAD_TOO_LARGE' ? 413 : body.code === 'REQUEST_BODY_TIMEOUT' ? 408 : 400;
     res.end(
-      body.code === "REQUEST_BODY_TIMEOUT"
-        ? requestBodyErrorToText("REQUEST_BODY_TIMEOUT")
+      body.code === 'REQUEST_BODY_TIMEOUT'
+        ? requestBodyErrorToText('REQUEST_BODY_TIMEOUT')
         : body.error,
     );
     return true;
   }
 
   const raw = body.value;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     res.statusCode = 400;
-    res.end("invalid payload");
+    res.end('invalid payload');
     return true;
   }
 
@@ -126,7 +128,7 @@ export async function handleMaxWebhookRequest(
 
   if (!matchedTarget) {
     res.statusCode = 401;
-    res.end("Unauthorized");
+    res.end('Unauthorized');
     return true;
   }
 
@@ -134,12 +136,12 @@ export async function handleMaxWebhookRequest(
   try {
     await matchedTarget.onUpdate(update);
     res.statusCode = 200;
-    res.setHeader("Content-Type", "application/json");
+    res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ ok: true }));
   } catch (err) {
     matchedTarget.error?.(`Webhook update processing failed: ${String(err)}`);
     res.statusCode = 500;
-    res.end("Internal Server Error");
+    res.end('Internal Server Error');
   }
 
   return true;
@@ -155,17 +157,17 @@ export async function subscribeMaxWebhook(params: {
   updateTypes?: string[];
 }): Promise<void> {
   const { api, webhookUrl, secret, updateTypes } = params;
-  
+
   await api.subscribe({
     url: webhookUrl,
     update_types: updateTypes ?? [
-      "message_created",
-      "message_callback",
-      "message_edited",
-      "message_removed",
-      "bot_started",
-      "bot_added",
-      "bot_removed",
+      'message_created',
+      'message_callback',
+      'message_edited',
+      'message_removed',
+      'bot_started',
+      'bot_added',
+      'bot_removed',
     ],
     secret,
   });

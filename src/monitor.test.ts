@@ -2,16 +2,17 @@
  * Tests for MAX monitor (interface verification)
  */
 
-import { describe, it, expect } from "vitest";
-import { startMaxPolling } from "./monitor.js";
+import { describe, expect, it } from 'vitest';
 
-describe("MAX Monitor", () => {
-  describe("startMaxPolling", () => {
-    it("should be a function", () => {
-      expect(typeof startMaxPolling).toBe("function");
+import { startMaxPolling } from './monitor.js';
+
+describe('MAX Monitor', () => {
+  describe('startMaxPolling', () => {
+    it('should be a function', () => {
+      expect(typeof startMaxPolling).toBe('function');
     });
 
-    it("should accept correct parameters", () => {
+    it('should accept correct parameters', () => {
       // Interface test - verify function signature
       expect(startMaxPolling.length).toBe(1); // Single options object
     });

@@ -14,8 +14,8 @@
  */
 export function toMaxMarkdown(text: string): string {
   // __text__ → ++text++ (подчёркивание, не bold — bold это **)
-  let result = text.replace(/__(.*?)__/g, "++$1++");
+  let result = text.replace(/__(.*?)__/g, '++$1++');
   // <u>text</u> → ++text++
-  result = result.replace(/<u>(.*?)<\/u>/gi, "++$1++");
+  result = result.replace(/<u>(.*?)<\/u>/gi, '++$1++');
   return result;
 }

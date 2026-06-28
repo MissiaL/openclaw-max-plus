@@ -1,4 +1,7 @@
 import eslintConfigPrettier from "eslint-config-prettier";
+import typescriptEslintPlugin from "@typescript-eslint/eslint-plugin";
+import typescriptEslintParser from "@typescript-eslint/parser";
+import simpleImportSort from "eslint-plugin-simple-import-sort";
 
 export default [
   {
@@ -7,15 +10,15 @@ export default [
   {
     files: ["**/*.ts"],
     languageOptions: {
-      parser: await import("@typescript-eslint/parser"),
+      parser: typescriptEslintParser,
       parserOptions: {
         ecmaVersion: 2022,
         sourceType: "module",
       },
     },
     plugins: {
-      "@typescript-eslint": await import("@typescript-eslint/eslint-plugin"),
-      "simple-import-sort": await import("eslint-plugin-simple-import-sort"),
+      "@typescript-eslint": typescriptEslintPlugin,
+      "simple-import-sort": simpleImportSort,
     },
     rules: {
       // TypeScript
@@ -23,7 +26,7 @@ export default [
       "@typescript-eslint/explicit-function-return-type": "off",
       "@typescript-eslint/explicit-module-boundary-types": "off",
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
-      "@typescript-eslint/consistent-type-imports": ["error", { prefer: "type-only" }],
+      "@typescript-eslint/consistent-type-imports": ["error", { prefer: "type-imports" }],
 
       // Import sorting
       "simple-import-sort/imports": "error",

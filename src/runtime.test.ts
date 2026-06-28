@@ -2,11 +2,11 @@
  * Tests for MAX runtime bridge
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
-import { setMaxRuntime, getMaxRuntime } from "./runtime.js";
+import { beforeEach, describe, expect, it } from 'vitest';
 
-describe("MAX Runtime Bridge", () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+import { getMaxRuntime, setMaxRuntime } from './runtime.js';
+
+describe('MAX Runtime Bridge', () => {
   const mockRuntime = {
     channel: {} as never,
     config: {} as never,
@@ -23,14 +23,14 @@ describe("MAX Runtime Bridge", () => {
     }
   });
 
-  describe("setMaxRuntime", () => {
-    it("should set runtime", () => {
+  describe('setMaxRuntime', () => {
+    it('should set runtime', () => {
       setMaxRuntime(mockRuntime);
       const runtime = getMaxRuntime();
       expect(runtime).toBe(mockRuntime);
     });
 
-    it("should allow overwriting runtime", () => {
+    it('should allow overwriting runtime', () => {
       const runtime1 = { ...mockRuntime };
       const runtime2 = { ...mockRuntime };
 
@@ -42,15 +42,15 @@ describe("MAX Runtime Bridge", () => {
     });
   });
 
-  describe("getMaxRuntime", () => {
-    it("should throw error when runtime not initialized", () => {
+  describe('getMaxRuntime', () => {
+    it('should throw error when runtime not initialized', () => {
       // Create a fresh module state by re-importing
       // For this test, we'll just verify the behavior when set
       setMaxRuntime(mockRuntime);
       expect(() => getMaxRuntime()).not.toThrow();
     });
 
-    it("should return runtime after initialization", () => {
+    it('should return runtime after initialization', () => {
       setMaxRuntime(mockRuntime);
       const runtime = getMaxRuntime();
       expect(runtime).toBeDefined();

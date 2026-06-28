@@ -2,13 +2,14 @@
  * Tests for MAX Bot API client
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { MaxApi, MaxApiError } from "./api.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const MOCK_TOKEN = "test-bot-token";
-const MOCK_BASE_URL = "https://test-api.max.ru";
+import { MaxApi, MaxApiError } from './api.js';
 
-describe("MaxApi", () => {
+const MOCK_TOKEN = 'test-bot-token';
+const MOCK_BASE_URL = 'https://test-api.max.ru';
+
+describe('MaxApi', () => {
   let api: MaxApi;
 
   beforeEach(() => {
@@ -20,28 +21,28 @@ describe("MaxApi", () => {
     vi.restoreAllMocks();
   });
 
-  describe("constructor", () => {
-    it("should create instance with provided options", () => {
+  describe('constructor', () => {
+    it('should create instance with provided options', () => {
       const customApi = new MaxApi({
-        token: "custom-token",
-        baseUrl: "https://custom.api",
+        token: 'custom-token',
+        baseUrl: 'https://custom.api',
         timeoutMs: 5000,
       });
       expect(customApi).toBeInstanceOf(MaxApi);
     });
 
-    it("should use default baseUrl if not provided", () => {
+    it('should use default baseUrl if not provided', () => {
       const defaultApi = new MaxApi({ token: MOCK_TOKEN });
       expect(defaultApi).toBeInstanceOf(MaxApi);
     });
   });
 
-  describe("getMe", () => {
-    it("should fetch bot info", async () => {
+  describe('getMe', () => {
+    it('should fetch bot info', async () => {
       const mockUser = {
         user_id: 12345,
-        first_name: "TestBot",
-        username: "testbot",
+        first_name: 'TestBot',
+        username: 'testbot',
         is_bot: true,
       };
 
@@ -53,9 +54,9 @@ describe("MaxApi", () => {
       const result = await api.getMe();
       expect(result).toEqual(mockUser);
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/me"),
+        expect.stringContaining('/me'),
         expect.objectContaining({
-          method: "GET",
+          method: 'GET',
           headers: expect.objectContaining({
             Authorization: MOCK_TOKEN,
           }),
@@ -63,22 +64,22 @@ describe("MaxApi", () => {
       );
     });
 
-    it("should handle API errors", async () => {
+    it('should handle API errors', async () => {
       global.fetch = vi.fn().mockResolvedValueOnce({
         ok: false,
         status: 401,
-        json: async () => ({ error: "Unauthorized" }),
+        json: async () => ({ error: 'Unauthorized' }),
       });
 
       await expect(api.getMe()).rejects.toThrow(MaxApiError);
     });
   });
 
-  describe("sendMessage", () => {
-    it("should send text message", async () => {
+  describe('sendMessage', () => {
+    it('should send text message', async () => {
       const mockResult = {
         message: {
-          body: { mid: "msg-123", text: "Hello" },
+          body: { mid: 'msg-123', text: 'Hello' },
           timestamp: Date.now(),
           recipient: { chat_id: 123 },
         },
@@ -89,28 +90,25 @@ describe("MaxApi", () => {
         json: async () => mockResult,
       });
 
-      const result = await api.sendMessage(
-        { text: "Hello" },
-        { chat_id: 123 },
-      );
+      const result = await api.sendMessage({ text: 'Hello' }, { chat_id: 123 });
 
       expect(result).toEqual(mockResult);
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/messages"),
+        expect.stringContaining('/messages'),
         expect.objectContaining({
-          method: "POST",
+          method: 'POST',
           headers: expect.objectContaining({
             Authorization: MOCK_TOKEN,
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
           }),
         }),
       );
     });
 
-    it("should send message with markdown format", async () => {
+    it('should send message with markdown format', async () => {
       const mockResult = {
         message: {
-          body: { mid: "msg-124", text: "**Bold**" },
+          body: { mid: 'msg-124', text: '**Bold**' },
           timestamp: Date.now(),
           recipient: { chat_id: 456 },
         },
@@ -121,57 +119,54 @@ describe("MaxApi", () => {
         json: async () => mockResult,
       });
 
-      await api.sendMessage(
-        { text: "**Bold**", format: "markdown" },
-        { chat_id: 456 },
-      );
+      await api.sendMessage({ text: '**Bold**', format: 'markdown' }, { chat_id: 456 });
 
       expect(global.fetch).toHaveBeenCalled();
     });
   });
 
-  describe("editMessage", () => {
-    it("should edit existing message", async () => {
+  describe('editMessage', () => {
+    it('should edit existing message', async () => {
       global.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true }),
       });
 
-      await api.editMessage("msg-123", { text: "Updated text" });
+      await api.editMessage('msg-123', { text: 'Updated text' });
 
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/messages?message_id=msg-123"),
+        expect.stringContaining('/messages?message_id=msg-123'),
         expect.objectContaining({
-          method: "PUT",
+          method: 'PUT',
         }),
       );
     });
   });
 
-  describe("deleteMessage", () => {
-    it("should delete message", async () => {
+  describe('deleteMessage', () => {
+    it('should delete message', async () => {
       global.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true }),
       });
 
-      await api.deleteMessage("msg-456");
+      await api.deleteMessage('msg-456');
 
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/messages?message_id=msg-456"),
+        expect.stringContaining('/messages?message_id=msg-456'),
         expect.objectContaining({
-          method: "DELETE",
+          method: 'DELETE',
         }),
       );
     });
   });
 
-  describe("getChats", () => {
-    it("should fetch chats list", async () => {
+  describe('getChats', () => {
+    it('should fetch chats list', async () => {
       const mockChats = {
         chats: [
-          { chat_id: 1, type: "dialog" as const, status: "active" },
-          { chat_id: 2, type: "chat" as const, status: "active", title: "Group" },
+          { chat_id: 1, type: 'dialog' as const, status: 'active' },
+          { chat_id: 2, type: 'chat' as const, status: 'active', title: 'Group' },
         ],
         marker: null,
       };
@@ -186,13 +181,13 @@ describe("MaxApi", () => {
     });
   });
 
-  describe("getChat", () => {
-    it("should fetch single chat info", async () => {
+  describe('getChat', () => {
+    it('should fetch single chat info', async () => {
       const mockChat = {
         chat_id: 123,
-        type: "chat" as const,
-        status: "active",
-        title: "Test Group",
+        type: 'chat' as const,
+        status: 'active',
+        title: 'Test Group',
       };
 
       global.fetch = vi.fn().mockResolvedValueOnce({
@@ -205,15 +200,15 @@ describe("MaxApi", () => {
     });
   });
 
-  describe("getUpdates", () => {
-    it("should poll for updates", async () => {
+  describe('getUpdates', () => {
+    it('should poll for updates', async () => {
       const mockUpdates = {
         updates: [
           {
-            update_type: "message_created" as const,
+            update_type: 'message_created' as const,
             timestamp: Date.now(),
             message: {
-              body: { mid: "msg-789", text: "Hello" },
+              body: { mid: 'msg-789', text: 'Hello' },
               timestamp: Date.now(),
               recipient: { chat_id: 123 },
             },
@@ -233,71 +228,69 @@ describe("MaxApi", () => {
     });
   });
 
-  describe("setMyCommands", () => {
-    it("should set bot commands", async () => {
+  describe('setMyCommands', () => {
+    it('should set bot commands', async () => {
       global.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true }),
       });
 
       const commands = [
-        { name: "start", description: "Start bot" },
-        { name: "help", description: "Show help" },
+        { name: 'start', description: 'Start bot' },
+        { name: 'help', description: 'Show help' },
       ];
 
       await api.setMyCommands(commands);
 
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/me/commands"),
+        expect.stringContaining('/me/commands'),
         expect.objectContaining({
-          method: "POST",
+          method: 'POST',
           body: JSON.stringify({ commands }),
         }),
       );
     });
   });
 
-  describe("webhook subscriptions", () => {
-    it("should subscribe to webhook", async () => {
+  describe('webhook subscriptions', () => {
+    it('should subscribe to webhook', async () => {
       global.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true }),
       });
 
       await api.subscribe({
-        url: "https://example.com/webhook",
-        secret: "my-secret",
+        url: 'https://example.com/webhook',
+        secret: 'my-secret',
       });
 
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/subscriptions"),
+        expect.stringContaining('/subscriptions'),
         expect.objectContaining({
-          method: "POST",
+          method: 'POST',
         }),
       );
     });
 
-    it("should unsubscribe from webhook", async () => {
+    it('should unsubscribe from webhook', async () => {
       global.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true }),
       });
 
-      await api.unsubscribe("https://example.com/webhook");
+      await api.unsubscribe('https://example.com/webhook');
 
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/subscriptions"),
+        expect.stringContaining('/subscriptions'),
         expect.objectContaining({
-          method: "DELETE",
+          method: 'DELETE',
         }),
       );
     });
 
-    it("should get subscriptions list", async () => {
+    it('should get subscriptions list', async () => {
       const mockSubs = {
-        subscriptions: [
-          { url: "https://example.com/webhook", time: Date.now() },
-        ],
+        subscriptions: [{ url: 'https://example.com/webhook', time: Date.now() }],
       };
 
       global.fetch = vi.fn().mockResolvedValueOnce({
@@ -310,13 +303,13 @@ describe("MaxApi", () => {
     });
   });
 
-  describe("timeout handling", () => {
-    it("should abort request on timeout", async () => {
+  describe('timeout handling', () => {
+    it('should abort request on timeout', async () => {
       const slowApi = new MaxApi({ token: MOCK_TOKEN, timeoutMs: 100 });
 
-      global.fetch = vi.fn().mockImplementationOnce(
-        () => new Promise((resolve) => setTimeout(resolve, 500)),
-      );
+      global.fetch = vi
+        .fn()
+        .mockImplementationOnce(() => new Promise((resolve) => setTimeout(resolve, 500)));
 
       await expect(slowApi.getMe()).rejects.toThrow();
     });

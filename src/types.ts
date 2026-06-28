@@ -24,8 +24,8 @@ export interface User {
 
 // ─── Chat ───────────────────────────────────────────────────────
 
-export type ChatType = "dialog" | "chat" | "channel";
-export type ChatStatus = "active" | "removed" | "left" | "closed";
+export type ChatType = 'dialog' | 'chat' | 'channel';
+export type ChatStatus = 'active' | 'removed' | 'left' | 'closed';
 
 export interface Chat {
   chat_id: number;
@@ -56,7 +56,7 @@ export interface Recipient {
 // ─── Attachments ────────────────────────────────────────────────
 
 export interface PhotoAttachment {
-  type: "image";
+  type: 'image';
   payload: {
     photo_id: number;
     token: string;
@@ -65,7 +65,7 @@ export interface PhotoAttachment {
 }
 
 export interface VideoAttachment {
-  type: "video";
+  type: 'video';
   payload: {
     token: string;
     url: string;
@@ -78,7 +78,7 @@ export interface VideoAttachment {
 }
 
 export interface AudioAttachment {
-  type: "audio";
+  type: 'audio';
   payload: {
     token: string;
     url: string;
@@ -87,7 +87,7 @@ export interface AudioAttachment {
 }
 
 export interface FileAttachment {
-  type: "file";
+  type: 'file';
   payload: {
     token: string;
     url: string;
@@ -98,7 +98,7 @@ export interface FileAttachment {
 }
 
 export interface StickerAttachment {
-  type: "sticker";
+  type: 'sticker';
   payload: {
     code: string;
     url: string;
@@ -108,7 +108,7 @@ export interface StickerAttachment {
 }
 
 export interface ContactAttachment {
-  type: "contact";
+  type: 'contact';
   payload: {
     vcf_info?: string;
     max_info?: User;
@@ -116,7 +116,7 @@ export interface ContactAttachment {
 }
 
 export interface LocationAttachment {
-  type: "location";
+  type: 'location';
   payload: {
     latitude: number;
     longitude: number;
@@ -124,7 +124,7 @@ export interface LocationAttachment {
 }
 
 export interface ShareAttachment {
-  type: "share";
+  type: 'share';
   payload: {
     url?: string;
     token?: string;
@@ -132,18 +132,25 @@ export interface ShareAttachment {
 }
 
 export interface InlineKeyboardAttachment {
-  type: "inline_keyboard";
+  type: 'inline_keyboard';
   payload: {
     buttons: InlineButton[][];
   };
 }
 
 export interface InlineButton {
-  type: "callback" | "link" | "request_contact" | "request_geo_location" | "open_app" | "message" | "clipboard";
+  type:
+    | 'callback'
+    | 'link'
+    | 'request_contact'
+    | 'request_geo_location'
+    | 'open_app'
+    | 'message'
+    | 'clipboard';
   text: string;
   payload?: string;
   url?: string;
-  intent?: "default" | "positive" | "negative";
+  intent?: 'default' | 'positive' | 'negative';
 }
 
 export type Attachment =
@@ -160,7 +167,7 @@ export type Attachment =
 // ─── Message ────────────────────────────────────────────────────
 
 export interface LinkedMessage {
-  type: "forward" | "reply";
+  type: 'forward' | 'reply';
   /** Sender of the linked message */
   sender?: User;
   chat_id?: number;
@@ -200,16 +207,16 @@ export interface Message {
 // ─── Updates ────────────────────────────────────────────────────
 
 export type UpdateType =
-  | "message_created"
-  | "message_callback"
-  | "message_edited"
-  | "message_removed"
-  | "bot_added"
-  | "bot_removed"
-  | "bot_started"
-  | "user_added"
-  | "user_removed"
-  | "chat_title_changed";
+  | 'message_created'
+  | 'message_callback'
+  | 'message_edited'
+  | 'message_removed'
+  | 'bot_added'
+  | 'bot_removed'
+  | 'bot_started'
+  | 'user_added'
+  | 'user_removed'
+  | 'chat_title_changed';
 
 interface BaseUpdate {
   update_type: UpdateType;
@@ -218,24 +225,24 @@ interface BaseUpdate {
 }
 
 export interface MessageCreatedUpdate extends BaseUpdate {
-  update_type: "message_created";
+  update_type: 'message_created';
   message: Message;
 }
 
 export interface MessageEditedUpdate extends BaseUpdate {
-  update_type: "message_edited";
+  update_type: 'message_edited';
   message: Message;
 }
 
 export interface MessageRemovedUpdate extends BaseUpdate {
-  update_type: "message_removed";
+  update_type: 'message_removed';
   message_id: string;
   chat_id?: number;
   user_id?: number;
 }
 
 export interface MessageCallbackUpdate extends BaseUpdate {
-  update_type: "message_callback";
+  update_type: 'message_callback';
   callback: {
     timestamp: number;
     callback_id: string;
@@ -246,28 +253,28 @@ export interface MessageCallbackUpdate extends BaseUpdate {
 }
 
 export interface BotStartedUpdate extends BaseUpdate {
-  update_type: "bot_started";
+  update_type: 'bot_started';
   chat_id: number;
   user: User;
   payload?: string;
 }
 
 export interface BotAddedUpdate extends BaseUpdate {
-  update_type: "bot_added";
+  update_type: 'bot_added';
   chat_id: number;
   user: User;
   is_channel: boolean;
 }
 
 export interface BotRemovedUpdate extends BaseUpdate {
-  update_type: "bot_removed";
+  update_type: 'bot_removed';
   chat_id: number;
   user: User;
   is_channel: boolean;
 }
 
 export interface UserAddedUpdate extends BaseUpdate {
-  update_type: "user_added";
+  update_type: 'user_added';
   chat_id: number;
   user: User;
   inviter_id?: number;
@@ -275,7 +282,7 @@ export interface UserAddedUpdate extends BaseUpdate {
 }
 
 export interface UserRemovedUpdate extends BaseUpdate {
-  update_type: "user_removed";
+  update_type: 'user_removed';
   chat_id: number;
   user: User;
   admin_id?: number;
@@ -283,7 +290,7 @@ export interface UserRemovedUpdate extends BaseUpdate {
 }
 
 export interface ChatTitleChangedUpdate extends BaseUpdate {
-  update_type: "chat_title_changed";
+  update_type: 'chat_title_changed';
   chat_id: number;
   user: User;
   title: string;
@@ -325,10 +332,10 @@ export interface MaxAccountConfig {
   name?: string;
   botToken?: string;
   allowFrom?: Array<string | number>;
-  dmPolicy?: "pairing" | "allowlist" | "open" | "disabled";
-  streaming?: "off" | "partial" | "block";
+  dmPolicy?: 'pairing' | 'allowlist' | 'open' | 'disabled';
+  streaming?: 'off' | 'partial' | 'block';
   /** Transport mode for receiving updates */
-  transport?: "polling" | "webhook";
+  transport?: 'polling' | 'webhook';
   /** Webhook URL (used when transport === "webhook") */
   webhookUrl?: string;
   /** Webhook server port (default: 9400) */
@@ -336,7 +343,7 @@ export interface MaxAccountConfig {
   /** Require @mention in group chats (default: true) */
   requireMention?: boolean;
   /** Group chat policy */
-  groupPolicy?: "allowlist" | "open" | "disabled";
+  groupPolicy?: 'allowlist' | 'open' | 'disabled';
   /** Allowed group chat IDs */
   allowGroups?: Array<string | number>;
 }
@@ -349,10 +356,10 @@ export interface MaxChannelConfig {
   /** Legacy top-level fields (single account) */
   botToken?: string;
   allowFrom?: Array<string | number>;
-  dmPolicy?: "pairing" | "allowlist" | "open" | "disabled";
-  streaming?: "off" | "partial" | "block";
+  dmPolicy?: 'pairing' | 'allowlist' | 'open' | 'disabled';
+  streaming?: 'off' | 'partial' | 'block';
   /** Transport mode: "polling" (default) or "webhook" */
-  transport?: "polling" | "webhook";
+  transport?: 'polling' | 'webhook';
   /** Public URL for webhook endpoint */
   webhookUrl?: string;
   /** Port for webhook HTTP server (default: 8443) */
@@ -379,7 +386,7 @@ export interface MaxUser {
 
 export interface MaxChat {
   chat_id: number;
-  type: "dialog" | "chat" | "channel";
+  type: 'dialog' | 'chat' | 'channel';
   status: string;
   title?: string | null;
   icon?: { url?: string } | null;
@@ -417,7 +424,7 @@ export interface MaxAttachment {
 }
 
 export interface MaxLinkedMessage {
-  type: "forward" | "reply";
+  type: 'forward' | 'reply';
   sender?: MaxUser;
   chat_id?: number;
   message?: MaxMessage;
@@ -433,18 +440,18 @@ export interface MaxUploadResult {
 }
 
 export type MaxUpdateType =
-  | "message_created"
-  | "message_callback"
-  | "message_edited"
-  | "message_removed"
-  | "message_reaction_created"
-  | "message_reaction_updated"
-  | "bot_added"
-  | "bot_removed"
-  | "bot_started"
-  | "user_added"
-  | "user_removed"
-  | "chat_title_changed";
+  | 'message_created'
+  | 'message_callback'
+  | 'message_edited'
+  | 'message_removed'
+  | 'message_reaction_created'
+  | 'message_reaction_updated'
+  | 'bot_added'
+  | 'bot_removed'
+  | 'bot_started'
+  | 'user_added'
+  | 'user_removed'
+  | 'chat_title_changed';
 
 export interface MaxUpdate {
   update_type: MaxUpdateType;
@@ -459,22 +466,22 @@ export interface MaxUpdate {
 }
 
 export interface MaxInlineKeyboardButton {
-  type: "callback" | "link" | "request_contact" | "request_geo_location" | "open_app" | "message";
+  type: 'callback' | 'link' | 'request_contact' | 'request_geo_location' | 'open_app' | 'message';
   text: string;
   payload?: string;
   url?: string;
-  intent?: "default" | "positive" | "negative";
+  intent?: 'default' | 'positive' | 'negative';
 }
 
 export interface MaxInlineKeyboardAttachment {
-  type: "inline_keyboard";
+  type: 'inline_keyboard';
   payload: {
     buttons: MaxInlineKeyboardButton[][];
   };
 }
 
 export interface MaxStickerAttachment {
-  type: "sticker";
+  type: 'sticker';
   payload: {
     code: string;
   };
@@ -483,9 +490,9 @@ export interface MaxStickerAttachment {
 export interface MaxNewMessageBody {
   text?: string | null;
   attachments?: (MaxAttachment | MaxInlineKeyboardAttachment | MaxStickerAttachment)[] | null;
-  link?: { type: "forward" | "reply"; mid: string } | null;
+  link?: { type: 'forward' | 'reply'; mid: string } | null;
   notify?: boolean;
-  format?: "markdown" | "html" | null;
+  format?: 'markdown' | 'html' | null;
 }
 
 export interface MaxBotCommand {

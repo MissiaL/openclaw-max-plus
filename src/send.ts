@@ -2,16 +2,17 @@
  * Outbound message sending for MAX.
  */
 
+import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
+
+import { resolveMaxAccount } from './accounts.js';
 import {
   MaxApi,
+  type MaxAttachment,
+  type MaxInlineKeyboardAttachment,
   type MaxNewMessageBody,
   type MaxSendResult,
-  type MaxInlineKeyboardAttachment,
   type MaxStickerAttachment,
-  type MaxAttachment,
-} from "./api.js";
-import { resolveMaxAccount } from "./accounts.js";
-import type { OpenClawConfig } from "openclaw/plugin-sdk/core";
+} from './api.js';
 
 export type MaxSendButton = {
   text: string;
@@ -25,7 +26,7 @@ export interface MaxSendOptions {
   accountId?: string;
   cfg?: OpenClawConfig;
   replyToMessageId?: string;
-  format?: "markdown" | "html";
+  format?: 'markdown' | 'html';
   disableLinkPreview?: boolean;
   notify?: boolean;
   buttons?: MaxSendButton[][];
@@ -40,11 +41,11 @@ function resolveToken(opts: MaxSendOptions): string {
     const account = resolveMaxAccount({ cfg: opts.cfg, accountId: opts.accountId });
     if (account.token) return account.token;
   }
-  throw new Error("MAX bot token not available");
+  throw new Error('MAX bot token not available');
 }
 
 function normalizeTargetId(to: string): number {
-  const normalized = to.startsWith("max:") ? to.slice(4) : to;
+  const normalized = to.startsWith('max:') ? to.slice(4) : to;
   const chatId = Number(normalized);
   if (Number.isNaN(chatId)) {
     throw new Error(`Invalid MAX target: ${to}`);
@@ -53,9 +54,10 @@ function normalizeTargetId(to: string): number {
 }
 
 export function readMaxChannelButtons(channelData: unknown): MaxSendButton[][] | undefined {
-  if (!channelData || typeof channelData !== "object" || Array.isArray(channelData)) return undefined;
+  if (!channelData || typeof channelData !== 'object' || Array.isArray(channelData))
+    return undefined;
   const maxData = (channelData as Record<string, unknown>).max;
-  if (!maxData || typeof maxData !== "object" || Array.isArray(maxData)) return undefined;
+  if (!maxData || typeof maxData !== 'object' || Array.isArray(maxData)) return undefined;
   const rawButtons = (maxData as Record<string, unknown>).buttons;
   if (!Array.isArray(rawButtons)) return undefined;
 
@@ -63,9 +65,12 @@ export function readMaxChannelButtons(channelData: unknown): MaxSendButton[][] |
     .map((row) => {
       const items = Array.isArray(row) ? row : [row];
       return items
-        .filter((button): button is Record<string, unknown> => Boolean(button) && typeof button === "object" && !Array.isArray(button))
+        .filter(
+          (button): button is Record<string, unknown> =>
+            Boolean(button) && typeof button === 'object' && !Array.isArray(button),
+        )
         .map((button) => ({
-          text: String(button.text ?? button.label ?? ""),
+          text: String(button.text ?? button.label ?? ''),
           payload: button.payload != null ? String(button.payload) : undefined,
           callback_data: button.callback_data != null ? String(button.callback_data) : undefined,
           url: button.url != null ? String(button.url) : undefined,
@@ -82,15 +87,15 @@ export function readMaxChannelButtons(channelData: unknown): MaxSendButton[][] |
  */
 function buildInlineKeyboard(buttons: MaxSendButton[][]): MaxInlineKeyboardAttachment {
   return {
-    type: "inline_keyboard",
+    type: 'inline_keyboard',
     payload: {
       buttons: buttons.map((row) =>
         row.map((btn) => {
           if (btn.url) {
-            return { type: "link" as const, text: btn.text, url: btn.url };
+            return { type: 'link' as const, text: btn.text, url: btn.url };
           }
           return {
-            type: "callback" as const,
+            type: 'callback' as const,
             text: btn.text,
             payload: btn.payload ?? btn.callback_data ?? btn.text,
           };
@@ -109,7 +114,7 @@ function buildMaxTextBody(text: string, opts: MaxSendOptions = {}): MaxNewMessag
 
   // Reply context
   if (opts.replyToMessageId) {
-    body.link = { type: "reply", mid: opts.replyToMessageId };
+    body.link = { type: 'reply', mid: opts.replyToMessageId };
   }
 
   // Inline keyboard from buttons
@@ -148,7 +153,7 @@ export async function sendMaxMessage(
   const result = await api.sendMessage(body, params);
 
   return {
-    messageId: result.message?.body?.mid ?? "",
+    messageId: result.message?.body?.mid ?? '',
     raw: result,
   };
 }
@@ -215,14 +220,14 @@ export async function sendMaxMediaMessage(
   const api = new MaxApi({ token });
 
   // Detect media type from path
-  const ext = mediaPath.split(".").pop()?.toLowerCase();
-  let mediaType: "image" | "video" | "audio" | "file" = "file";
-  if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext ?? "")) {
-    mediaType = "image";
-  } else if (["mp4", "mov", "avi"].includes(ext ?? "")) {
-    mediaType = "video";
-  } else if (["mp3", "wav", "ogg"].includes(ext ?? "")) {
-    mediaType = "audio";
+  const ext = mediaPath.split('.').pop()?.toLowerCase();
+  let mediaType: 'image' | 'video' | 'audio' | 'file' = 'file';
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext ?? '')) {
+    mediaType = 'image';
+  } else if (['mp4', 'mov', 'avi'].includes(ext ?? '')) {
+    mediaType = 'video';
+  } else if (['mp3', 'wav', 'ogg'].includes(ext ?? '')) {
+    mediaType = 'audio';
   }
 
   // Upload media
@@ -231,7 +236,14 @@ export async function sendMaxMediaMessage(
   // Build attachment — MAX requires token from upload response
   const attachments: MaxAttachment[] = [
     {
-      type: mediaType === "image" ? "image" : mediaType === "video" ? "video" : mediaType === "audio" ? "audio" : "file",
+      type:
+        mediaType === 'image'
+          ? 'image'
+          : mediaType === 'video'
+            ? 'video'
+            : mediaType === 'audio'
+              ? 'audio'
+              : 'file',
       payload: { token: uploadResult.token },
     },
   ];
@@ -239,15 +251,15 @@ export async function sendMaxMediaMessage(
   // Add inline keyboard if present
   if (opts.buttons?.length) {
     attachments.push({
-      type: "inline_keyboard",
+      type: 'inline_keyboard',
       payload: {
         buttons: opts.buttons.map((row) =>
           row.map((btn) => {
             if (btn.url) {
-              return { type: "link" as const, text: btn.text, url: btn.url };
+              return { type: 'link' as const, text: btn.text, url: btn.url };
             }
             return {
-              type: "callback" as const,
+              type: 'callback' as const,
               text: btn.text,
               payload: btn.payload ?? btn.callback_data ?? btn.text,
             };
@@ -265,7 +277,7 @@ export async function sendMaxMediaMessage(
   };
 
   if (opts.replyToMessageId) {
-    body.link = { type: "reply", mid: opts.replyToMessageId };
+    body.link = { type: 'reply', mid: opts.replyToMessageId };
   }
 
   const chatId = normalizeTargetId(to);
@@ -280,7 +292,7 @@ export async function sendMaxMediaMessage(
   const result = await api.sendMessage(body, params);
 
   return {
-    messageId: result.message?.body?.mid ?? "",
+    messageId: result.message?.body?.mid ?? '',
     raw: result,
   };
 }
@@ -307,14 +319,14 @@ export async function sendMaxContact(
   } else {
     // Generate VCard from name + phone
     // Use literal \n escape sequence for JSON serialization
-    const vcfParts = ["BEGIN:VCARD", "VERSION:3.0", `FN:${contact.name}`];
+    const vcfParts = ['BEGIN:VCARD', 'VERSION:3.0', `FN:${contact.name}`];
     if (contact.vcfPhone) vcfParts.push(`TEL:${contact.vcfPhone}`);
-    vcfParts.push("END:VCARD");
-    payload.vcfInfo = vcfParts.join("\n");
+    vcfParts.push('END:VCARD');
+    payload.vcfInfo = vcfParts.join('\n');
   }
 
   const attachment: MaxAttachment = {
-    type: "contact",
+    type: 'contact',
     payload,
   };
 
@@ -325,14 +337,14 @@ export async function sendMaxContact(
   };
 
   if (opts.replyToMessageId) {
-    body.link = { type: "reply", mid: opts.replyToMessageId };
+    body.link = { type: 'reply', mid: opts.replyToMessageId };
   }
 
   const chatId = normalizeTargetId(to);
   const result = await api.sendMessage(body, { chat_id: chatId });
 
   return {
-    messageId: result.message?.body?.mid ?? "",
+    messageId: result.message?.body?.mid ?? '',
     raw: result,
   };
 }
@@ -350,7 +362,7 @@ export async function sendMaxLocation(
   const api = new MaxApi({ token });
 
   const attachment: MaxAttachment = {
-    type: "location",
+    type: 'location',
     latitude: location.latitude,
     longitude: location.longitude,
   };
@@ -363,14 +375,14 @@ export async function sendMaxLocation(
   };
 
   if (opts.replyToMessageId) {
-    body.link = { type: "reply", mid: opts.replyToMessageId };
+    body.link = { type: 'reply', mid: opts.replyToMessageId };
   }
 
   const chatId = normalizeTargetId(to);
   const result = await api.sendMessage(body, { chat_id: chatId });
 
   return {
-    messageId: result.message?.body?.mid ?? "",
+    messageId: result.message?.body?.mid ?? '',
     raw: result,
   };
 }
@@ -388,7 +400,7 @@ export async function sendMaxSticker(
   const api = new MaxApi({ token });
 
   const stickerAttachment: MaxStickerAttachment = {
-    type: "sticker",
+    type: 'sticker',
     payload: { code: stickerCode },
   };
 
@@ -398,7 +410,7 @@ export async function sendMaxSticker(
   };
 
   if (opts.replyToMessageId) {
-    body.link = { type: "reply", mid: opts.replyToMessageId };
+    body.link = { type: 'reply', mid: opts.replyToMessageId };
   }
 
   const chatId = normalizeTargetId(to);
@@ -409,7 +421,7 @@ export async function sendMaxSticker(
   const result = await api.sendMessage(body, params);
 
   return {
-    messageId: result.message?.body?.mid ?? "",
+    messageId: result.message?.body?.mid ?? '',
     raw: result,
   };
 }

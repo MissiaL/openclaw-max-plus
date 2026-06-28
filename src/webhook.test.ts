@@ -2,20 +2,22 @@
  * Tests for MAX webhook handler
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { IncomingMessage, ServerResponse } from "node:http";
-import { Readable } from "node:stream";
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { Readable } from 'node:stream';
+
+import type { OpenClawConfig } from 'openclaw/plugin-sdk';
+import { describe, expect, it, vi } from 'vitest';
+
+import type { ResolvedMaxAccount } from './accounts.js';
+import { MaxApi } from './api.js';
 import {
   handleMaxWebhookRequest,
+  type MaxWebhookTarget,
   registerMaxWebhookTarget,
   resolveMaxWebhookPath,
   subscribeMaxWebhook,
   unsubscribeMaxWebhook,
-  type MaxWebhookTarget,
-} from "./webhook.js";
-import { MaxApi } from "./api.js";
-import type { ResolvedMaxAccount } from "./accounts.js";
-import type { OpenClawConfig } from "openclaw/plugin-sdk";
+} from './webhook.js';
 
 function createMockRequest(
   method: string,
@@ -53,61 +55,58 @@ function createMockResponse(): MockResponse {
     statusCode: 200,
     _status: undefined,
     _headers: {},
-    _body: "",
+    _body: '',
     setHeader(name: string, value: string) {
       this._headers[name] = value;
       return this;
     },
     end(data?: string) {
-      this._body = data ?? "";
+      this._body = data ?? '';
       this._status = this.statusCode;
     },
   } as MockResponse;
 }
 
-describe("MAX Webhook Handler", () => {
-  describe("resolveMaxWebhookPath", () => {
-    it("should use provided webhookPath", () => {
-      const path = resolveMaxWebhookPath("/custom-path", undefined);
-      expect(path).toBe("/custom-path");
+describe('MAX Webhook Handler', () => {
+  describe('resolveMaxWebhookPath', () => {
+    it('should use provided webhookPath', () => {
+      const path = resolveMaxWebhookPath('/custom-path', undefined);
+      expect(path).toBe('/custom-path');
     });
 
-    it("should extract path from webhookUrl", () => {
-      const path = resolveMaxWebhookPath(
-        undefined,
-        "https://example.com/api/max",
-      );
-      expect(path).toBe("/api/max");
+    it('should extract path from webhookUrl', () => {
+      const path = resolveMaxWebhookPath(undefined, 'https://example.com/api/max');
+      expect(path).toBe('/api/max');
     });
 
-    it("should normalize path (add leading slash)", () => {
-      const path = resolveMaxWebhookPath("custom", undefined);
-      expect(path).toBe("/custom");
+    it('should normalize path (add leading slash)', () => {
+      const path = resolveMaxWebhookPath('custom', undefined);
+      expect(path).toBe('/custom');
     });
 
-    it("should remove trailing slash (except root)", () => {
-      const path = resolveMaxWebhookPath("/api/max/", undefined);
-      expect(path).toBe("/api/max");
+    it('should remove trailing slash (except root)', () => {
+      const path = resolveMaxWebhookPath('/api/max/', undefined);
+      expect(path).toBe('/api/max');
     });
 
-    it("should default to /max", () => {
+    it('should default to /max', () => {
       const path = resolveMaxWebhookPath(undefined, undefined);
-      expect(path).toBe("/max");
+      expect(path).toBe('/max');
     });
 
-    it("should handle root path", () => {
-      const path = resolveMaxWebhookPath("/", undefined);
-      expect(path).toBe("/");
+    it('should handle root path', () => {
+      const path = resolveMaxWebhookPath('/', undefined);
+      expect(path).toBe('/');
     });
   });
 
-  describe("registerMaxWebhookTarget", () => {
-    it("should register and unregister target", async () => {
+  describe('registerMaxWebhookTarget', () => {
+    it('should register and unregister target', async () => {
       const mockAccount: ResolvedMaxAccount = {
-        accountId: "default",
+        accountId: 'default',
         enabled: true,
-        token: "test-token",
-        tokenSource: "config",
+        token: 'test-token',
+        tokenSource: 'config',
         config: {},
       };
 
@@ -117,23 +116,23 @@ describe("MAX Webhook Handler", () => {
       const target: MaxWebhookTarget = {
         account: mockAccount,
         config: mockConfig,
-        path: "/test-webhook",
+        path: '/test-webhook',
         onUpdate,
       };
 
       const unregister = registerMaxWebhookTarget(target);
-      expect(typeof unregister).toBe("function");
+      expect(typeof unregister).toBe('function');
 
       // Test that target is registered by making a webhook request
       const req = createMockRequest(
-        "POST",
-        "/test-webhook",
+        'POST',
+        '/test-webhook',
         {},
         JSON.stringify({
-          update_type: "message_created",
+          update_type: 'message_created',
           timestamp: Date.now(),
           message: {
-            body: { mid: "msg-1", text: "Hello" },
+            body: { mid: 'msg-1', text: 'Hello' },
             timestamp: Date.now(),
             recipient: { chat_id: 123 },
           },
@@ -150,38 +149,38 @@ describe("MAX Webhook Handler", () => {
 
       // Request should not be handled after unregister
       const req2 = createMockRequest(
-        "POST",
-        "/test-webhook",
+        'POST',
+        '/test-webhook',
         {},
-        JSON.stringify({ update_type: "bot_started", timestamp: Date.now() }),
+        JSON.stringify({ update_type: 'bot_started', timestamp: Date.now() }),
       );
       const res2 = createMockResponse();
       const handled2 = await handleMaxWebhookRequest(req2, res2);
       expect(handled2).toBe(false);
     });
 
-    it("should normalize target path", async () => {
+    it('should normalize target path', async () => {
       const mockAccount: ResolvedMaxAccount = {
-        accountId: "default",
+        accountId: 'default',
         enabled: true,
-        token: "token",
-        tokenSource: "config",
+        token: 'token',
+        tokenSource: 'config',
         config: {},
       };
       const target: MaxWebhookTarget = {
         account: mockAccount,
         config: { channels: {} },
-        path: "no-leading-slash",
+        path: 'no-leading-slash',
         onUpdate: vi.fn(),
       };
 
       const unregister = registerMaxWebhookTarget(target);
 
       const req = createMockRequest(
-        "POST",
-        "/no-leading-slash",
+        'POST',
+        '/no-leading-slash',
         {},
-        JSON.stringify({ update_type: "bot_started", timestamp: Date.now() }),
+        JSON.stringify({ update_type: 'bot_started', timestamp: Date.now() }),
       );
       const res = createMockResponse();
 
@@ -192,64 +191,64 @@ describe("MAX Webhook Handler", () => {
     });
   });
 
-  describe("handleMaxWebhookRequest", () => {
-    it("should return false for non-registered path", async () => {
-      const req = createMockRequest("POST", "/unknown-path");
+  describe('handleMaxWebhookRequest', () => {
+    it('should return false for non-registered path', async () => {
+      const req = createMockRequest('POST', '/unknown-path');
       const res = createMockResponse();
       const handled = await handleMaxWebhookRequest(req, res);
       expect(handled).toBe(false);
     });
 
-    it("should reject non-POST requests", async () => {
+    it('should reject non-POST requests', async () => {
       const mockAccount: ResolvedMaxAccount = {
-        accountId: "default",
+        accountId: 'default',
         enabled: true,
-        token: "token",
-        tokenSource: "config",
+        token: 'token',
+        tokenSource: 'config',
         config: {},
       };
       const target: MaxWebhookTarget = {
         account: mockAccount,
         config: { channels: {} },
-        path: "/test",
+        path: '/test',
         onUpdate: vi.fn(),
       };
       const unregister = registerMaxWebhookTarget(target);
 
-      const req = createMockRequest("GET", "/test");
+      const req = createMockRequest('GET', '/test');
       const res = createMockResponse();
       const handled = await handleMaxWebhookRequest(req, res);
 
       expect(handled).toBe(true);
       expect(res._status).toBe(405);
-      expect(res._headers.Allow).toBe("POST");
+      expect(res._headers.Allow).toBe('POST');
 
       unregister();
     });
 
-    it("should verify webhook secret", async () => {
+    it('should verify webhook secret', async () => {
       const mockAccount: ResolvedMaxAccount = {
-        accountId: "default",
+        accountId: 'default',
         enabled: true,
-        token: "token",
-        tokenSource: "config",
+        token: 'token',
+        tokenSource: 'config',
         config: {},
       };
       const target: MaxWebhookTarget = {
         account: mockAccount,
         config: { channels: {} },
-        path: "/secure",
-        secret: "correct-secret",
+        path: '/secure',
+        secret: 'correct-secret',
         onUpdate: vi.fn(),
       };
       const unregister = registerMaxWebhookTarget(target);
 
       // Request without secret header
       const req1 = createMockRequest(
-        "POST",
-        "/secure",
+        'POST',
+        '/secure',
         {},
-        JSON.stringify({ update_type: "bot_started", timestamp: Date.now() }),
+        JSON.stringify({ update_type: 'bot_started', timestamp: Date.now() }),
       );
       const res1 = createMockResponse();
       await handleMaxWebhookRequest(req1, res1);
@@ -258,10 +257,10 @@ describe("MAX Webhook Handler", () => {
 
       // Request with wrong secret
       const req2 = createMockRequest(
-        "POST",
-        "/secure",
-        { "x-max-bot-api-secret": "wrong-secret" },
-        JSON.stringify({ update_type: "bot_started", timestamp: Date.now() }),
+        'POST',
+        '/secure',
+        { 'x-max-bot-api-secret': 'wrong-secret' },
+        JSON.stringify({ update_type: 'bot_started', timestamp: Date.now() }),
       );
       const res2 = createMockResponse();
       await handleMaxWebhookRequest(req2, res2);
@@ -269,10 +268,10 @@ describe("MAX Webhook Handler", () => {
 
       // Request with correct secret
       const req3 = createMockRequest(
-        "POST",
-        "/secure",
-        { "x-max-bot-api-secret": "correct-secret" },
-        JSON.stringify({ update_type: "bot_started", timestamp: Date.now() }),
+        'POST',
+        '/secure',
+        { 'x-max-bot-api-secret': 'correct-secret' },
+        JSON.stringify({ update_type: 'bot_started', timestamp: Date.now() }),
       );
       const res3 = createMockResponse();
       await handleMaxWebhookRequest(req3, res3);
@@ -282,37 +281,37 @@ describe("MAX Webhook Handler", () => {
       unregister();
     });
 
-    it("should process valid update", async () => {
+    it('should process valid update', async () => {
       const mockAccount: ResolvedMaxAccount = {
-        accountId: "default",
+        accountId: 'default',
         enabled: true,
-        token: "token",
-        tokenSource: "config",
+        token: 'token',
+        tokenSource: 'config',
         config: {},
       };
       const onUpdate = vi.fn().mockResolvedValue(undefined);
       const target: MaxWebhookTarget = {
         account: mockAccount,
         config: { channels: {} },
-        path: "/hook",
+        path: '/hook',
         onUpdate,
       };
       const unregister = registerMaxWebhookTarget(target);
 
       const update = {
-        update_type: "message_created",
+        update_type: 'message_created',
         timestamp: Date.now(),
         message: {
-          body: { mid: "msg-test", text: "Hello" },
+          body: { mid: 'msg-test', text: 'Hello' },
           timestamp: Date.now(),
           recipient: { chat_id: 123 },
         },
       };
 
       const req = createMockRequest(
-        "POST",
-        "/hook",
-        { "content-type": "application/json" },
+        'POST',
+        '/hook',
+        { 'content-type': 'application/json' },
         JSON.stringify(update),
       );
       const res = createMockResponse();
@@ -321,35 +320,35 @@ describe("MAX Webhook Handler", () => {
 
       expect(res._status).toBe(200);
       expect(onUpdate).toHaveBeenCalledWith(update);
-      expect(res._body).toContain("ok");
+      expect(res._body).toContain('ok');
 
       unregister();
     });
 
-    it("should handle onUpdate errors", async () => {
+    it('should handle onUpdate errors', async () => {
       const mockAccount: ResolvedMaxAccount = {
-        accountId: "default",
+        accountId: 'default',
         enabled: true,
-        token: "token",
-        tokenSource: "config",
+        token: 'token',
+        tokenSource: 'config',
         config: {},
       };
-      const onUpdate = vi.fn().mockRejectedValue(new Error("Processing failed"));
+      const onUpdate = vi.fn().mockRejectedValue(new Error('Processing failed'));
       const errorLog = vi.fn();
       const target: MaxWebhookTarget = {
         account: mockAccount,
         config: { channels: {} },
-        path: "/error-test",
+        path: '/error-test',
         onUpdate,
         error: errorLog,
       };
       const unregister = registerMaxWebhookTarget(target);
 
       const req = createMockRequest(
-        "POST",
-        "/error-test",
+        'POST',
+        '/error-test',
         {},
-        JSON.stringify({ update_type: "bot_started", timestamp: Date.now() }),
+        JSON.stringify({ update_type: 'bot_started', timestamp: Date.now() }),
       );
       const res = createMockResponse();
 
@@ -362,63 +361,61 @@ describe("MAX Webhook Handler", () => {
     });
   });
 
-  describe("subscribeMaxWebhook", () => {
-    it("should call API subscribe endpoint", async () => {
+  describe('subscribeMaxWebhook', () => {
+    it('should call API subscribe endpoint', async () => {
       global.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true }),
       });
 
-      const api = new MaxApi({ token: "test-token" });
+      const api = new MaxApi({ token: 'test-token' });
       await subscribeMaxWebhook({
         api,
-        webhookUrl: "https://example.com/webhook",
-        secret: "my-secret",
+        webhookUrl: 'https://example.com/webhook',
+        secret: 'my-secret',
       });
 
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/subscriptions"),
-        expect.objectContaining({ method: "POST" }),
+        expect.stringContaining('/subscriptions'),
+        expect.objectContaining({ method: 'POST' }),
       );
     });
 
-    it("should include update types", async () => {
+    it('should include update types', async () => {
       global.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true }),
       });
 
-      const api = new MaxApi({ token: "test-token" });
+      const api = new MaxApi({ token: 'test-token' });
       await subscribeMaxWebhook({
         api,
-        webhookUrl: "https://example.com/webhook",
-        updateTypes: ["message_created", "bot_started"],
+        webhookUrl: 'https://example.com/webhook',
+        updateTypes: ['message_created', 'bot_started'],
       });
 
-      const callBody = JSON.parse(
-        (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body,
-      );
-      expect(callBody.update_types).toContain("message_created");
-      expect(callBody.update_types).toContain("bot_started");
+      const callBody = JSON.parse((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+      expect(callBody.update_types).toContain('message_created');
+      expect(callBody.update_types).toContain('bot_started');
     });
   });
 
-  describe("unsubscribeMaxWebhook", () => {
-    it("should call API unsubscribe endpoint", async () => {
+  describe('unsubscribeMaxWebhook', () => {
+    it('should call API unsubscribe endpoint', async () => {
       global.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true }),
       });
 
-      const api = new MaxApi({ token: "test-token" });
+      const api = new MaxApi({ token: 'test-token' });
       await unsubscribeMaxWebhook({
         api,
-        webhookUrl: "https://example.com/webhook",
+        webhookUrl: 'https://example.com/webhook',
       });
 
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/subscriptions"),
-        expect.objectContaining({ method: "DELETE" }),
+        expect.stringContaining('/subscriptions'),
+        expect.objectContaining({ method: 'DELETE' }),
       );
     });
   });

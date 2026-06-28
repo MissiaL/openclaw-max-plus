@@ -7,8 +7,8 @@ import {
   GroupPolicySchema,
   MarkdownConfigSchema,
   ToolPolicySchema,
-} from "openclaw/plugin-sdk/channel-config-schema";
-import { z } from "zod";
+} from 'openclaw/plugin-sdk/channel-config-schema';
+import { z } from 'zod';
 
 // These schemas were removed from the public plugin-sdk surface in OpenClaw 2026.3.x.
 // Inlined here to stay compatible with both old and new runtimes.
@@ -33,9 +33,9 @@ function requireOpenAllowFrom(params: {
   path: (string | number)[];
   message: string;
 }): void {
-  if (params.policy !== "open") return;
+  if (params.policy !== 'open') return;
   const normalized = (params.allowFrom ?? []).map(String);
-  if (normalized.includes("*")) return;
+  if (normalized.includes('*')) return;
   params.ctx.addIssue({
     code: z.ZodIssueCode.custom,
     path: params.path,
@@ -67,10 +67,10 @@ export const MaxAccountSchemaBase = z
     markdown: MarkdownConfigSchema.optional(),
     botToken: z.string().optional(),
     tokenFile: z.string().optional(),
-    dmPolicy: DmPolicySchema.optional().default("pairing"),
+    dmPolicy: DmPolicySchema.optional().default('pairing'),
     allowFrom: z.array(z.union([z.string(), z.number()])).optional(),
     groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
-    groupPolicy: GroupPolicySchema.optional().default("allowlist"),
+    groupPolicy: GroupPolicySchema.optional().default('allowlist'),
     groups: z.record(z.string(), MaxGroupSchema.optional()).optional(),
     webhookUrl: z.string().optional(),
     webhookSecret: z.string().optional(),
@@ -80,14 +80,14 @@ export const MaxAccountSchemaBase = z
     dms: z.record(z.string(), DmConfigSchema.optional()).optional(),
     textChunkLimit: z.number().int().positive().optional(),
     blockStreaming: z.boolean().optional(),
-    streamMode: z.enum(["off", "partial", "block"]).optional(),
+    streamMode: z.enum(['off', 'partial', 'block']).optional(),
     blockStreamingCoalesce: BlockStreamingCoalesceSchema.optional(),
     responsePrefix: z.string().optional(),
     mediaMaxMb: z.number().positive().optional(),
     actions: z
       .record(
         z.string(),
-        z.union([z.boolean(), z.enum(["pairing", "allowlist", "open"])]).optional(),
+        z.union([z.boolean(), z.enum(['pairing', 'allowlist', 'open'])]).optional(),
       )
       .optional(),
   })
@@ -101,7 +101,7 @@ export const MaxAccountSchema = MaxAccountSchemaBase.superRefine((value, ctx) =>
     policy: value.dmPolicy,
     allowFrom: value.allowFrom,
     ctx,
-    path: ["allowFrom"],
+    path: ['allowFrom'],
     message: 'channels.max.dmPolicy="open" requires channels.max.allowFrom to include "*"',
   });
 });
@@ -116,7 +116,7 @@ export const MaxConfigSchema = MaxAccountSchemaBase.extend({
     policy: value.dmPolicy,
     allowFrom: value.allowFrom,
     ctx,
-    path: ["allowFrom"],
+    path: ['allowFrom'],
     message: 'channels.max.dmPolicy="open" requires channels.max.allowFrom to include "*"',
   });
 });
