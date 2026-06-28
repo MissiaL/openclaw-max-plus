@@ -8,6 +8,7 @@
 import type { OpenClawConfig } from "openclaw/plugin-sdk/core";
 import type { ChannelLogSink } from "openclaw/plugin-sdk/channel-runtime";
 import { createReplyPrefixOptions } from "openclaw/plugin-sdk/channel-runtime";
+import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-reply-options-runtime";
 import { MaxApi, type MaxUpdate, type MaxMessage, type MaxUser, type MaxCallback } from "./api.js";
 import { resolveMaxAccount, type ResolvedMaxAccount } from "./accounts.js";
 import { answerMaxCallback, sendMaxMessage, sendMaxMediaMessage, editMaxMessage, readMaxChannelButtons } from "./send.js";
@@ -584,12 +585,21 @@ export async function processIncomingMessage(
     accountId: route.accountId,
   });
 
-  // Send typing indicator while agent processes
-  if (chatId != null) {
-    opts.api.sendAction(chatId, "typing_on").catch((err) => {
-      log?.debug?.(`[${account.accountId}] typing_on failed: ${String(err)}`);
-    });
-  }
+  // Typing indicator while the agent processes. MAX's "typing_on" action
+  // expires after a few seconds, so a single call only flashes briefly. Hand
+  // the host a `start` callback instead: the dispatcher keeps the indicator
+  // alive (re-firing on an interval) for the whole turn and stops it on idle.
+  const typingCallbacks =
+    chatId != null
+      ? createTypingCallbacks({
+          start: async () => {
+            await opts.api.sendAction(chatId, "typing_on");
+          },
+          onStartError: (err) => {
+            log?.debug?.(`[${account.accountId}] typing_on failed: ${String(err)}`);
+          },
+        })
+      : undefined;
 
   // Streaming modes: "partial" = edit single message, "block" = each block as separate message
   const streamMode = account.config.streamMode ?? "off";
@@ -671,6 +681,7 @@ export async function processIncomingMessage(
     cfg: config,
     dispatcherOptions: {
       ...prefixOptions,
+      ...(typingCallbacks ? { typingCallbacks } : {}),
       deliver: async (payload) => {
         if (useEditStreaming && draftMid && payload.text) {
           // Final delivery replaces the draft message with final text
