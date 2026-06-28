@@ -4,3 +4,6 @@ dist-ts/
 *.bak
 .env
 .env.*
+
+# Локальная памятка для Claude Code (не коммитить)
+CLAUDE.md
