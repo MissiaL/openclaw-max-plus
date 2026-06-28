@@ -46,27 +46,18 @@
               ]
             }
           },
-          "streaming": {
-            "type": "string",
-            "enum": [
-              "off",
-              "partial",
-              "block"
-            ]
-          },
-          "transport": {
-            "type": "string",
-            "enum": [
-              "polling",
-              "webhook"
-            ]
-          },
           "webhookUrl": {
             "type": "string"
           },
-          "webhookPort": {
-            "type": "integer",
-            "minimum": 0
+          "webhookSecret": {
+            "type": "string"
+          },
+          "webhookPath": {
+            "type": "string"
+          },
+          "mediaMaxMb": {
+            "type": "number",
+            "exclusiveMinimum": 0
           },
           "accounts": {
             "type": "object",
@@ -104,30 +95,14 @@
                     ]
                   }
                 },
-                "streaming": {
-                  "type": "string",
-                  "enum": [
-                    "off",
-                    "partial",
-                    "block"
-                  ]
-                },
-                "transport": {
-                  "type": "string",
-                  "enum": [
-                    "polling",
-                    "webhook"
-                  ]
-                },
                 "webhookUrl": {
                   "type": "string"
                 },
-                "webhookPort": {
-                  "type": "integer",
-                  "minimum": 0
+                "webhookSecret": {
+                  "type": "string"
                 },
-                "requireMention": {
-                  "type": "boolean"
+                "webhookPath": {
+                  "type": "string"
                 },
                 "groupPolicy": {
                   "type": "string",
@@ -136,19 +111,6 @@
                     "open",
                     "disabled"
                   ]
-                },
-                "allowGroups": {
-                  "type": "array",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      }
-                    ]
-                  }
                 },
                 "streamMode": {
                   "type": "string",
@@ -183,9 +145,6 @@
               },
               "additionalProperties": true
             }
-          },
-          "defaultAccount": {
-            "type": "string"
           },
           "streamMode": {
             "type": "string",

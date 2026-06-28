@@ -325,48 +325,10 @@ export interface Subscription {
   version?: string;
 }
 
-// ─── Account config (for OpenClaw plugin) ──────────────────────
-
-export interface MaxAccountConfig {
-  enabled?: boolean;
-  name?: string;
-  botToken?: string;
-  allowFrom?: Array<string | number>;
-  dmPolicy?: 'pairing' | 'allowlist' | 'open' | 'disabled';
-  streaming?: 'off' | 'partial' | 'block';
-  /** Transport mode for receiving updates */
-  transport?: 'polling' | 'webhook';
-  /** Webhook URL (used when transport === "webhook") */
-  webhookUrl?: string;
-  /** Webhook server port (default: 9400) */
-  webhookPort?: number;
-  /** Require @mention in group chats (default: true) */
-  requireMention?: boolean;
-  /** Group chat policy */
-  groupPolicy?: 'allowlist' | 'open' | 'disabled';
-  /** Allowed group chat IDs */
-  allowGroups?: Array<string | number>;
-}
-
-export interface MaxChannelConfig {
-  enabled?: boolean;
-  defaultAccount?: string;
-  /** Named accounts (multi-account support) */
-  accounts?: Record<string, MaxAccountConfig>;
-  /** Legacy top-level fields (single account) */
-  botToken?: string;
-  allowFrom?: Array<string | number>;
-  dmPolicy?: 'pairing' | 'allowlist' | 'open' | 'disabled';
-  streaming?: 'off' | 'partial' | 'block';
-  /** Transport mode: "polling" (default) or "webhook" */
-  transport?: 'polling' | 'webhook';
-  /** Public URL for webhook endpoint */
-  webhookUrl?: string;
-  /** Port for webhook HTTP server (default: 8443) */
-  webhookPort?: number;
-}
-
-// NOTE: ResolvedMaxAccount определён в accounts.ts (каноничный источник)
+// NOTE: account/channel config types live in accounts.ts (MaxAccountConfig)
+// and config-schema.ts (Zod). The previous duplicate interfaces here had drifted
+// from the runtime (streaming/transport/webhookPort/allowGroups) and were removed.
+// ResolvedMaxAccount is defined in accounts.ts (canonical source).
 
 // ─── MAX API Client Types (для api.ts) ────────────────────────
 
