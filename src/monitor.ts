@@ -614,13 +614,20 @@ export async function processIncomingMessage(
     MediaTypes: mediaTypes.length > 0 ? mediaTypes : undefined,
     // Text-slash command detection: treat /status, /models etc. as text commands
     // so OpenClaw routes them through handleCommands instead of silently dropping
+    // Text-slash command detection: treat /status, /models etc. as text commands
+    // so OpenClaw routes them through handleCommands instead of silently dropping.
+    // The core only executes a text-slash turn when authorized === true (an
+    // undefined/false value degrades to "unauthorized" and the command reply is
+    // never produced). Any sender reaching this point has already cleared every
+    // DM/group allowlist + mention gate above, so the command is authorized.
     ...(isTextSlashCommand
       ? {
           CommandSource: 'text' as const,
+          CommandAuthorized: true,
           CommandTurn: {
             kind: 'text-slash' as const,
             source: 'text' as const,
-            authorized: undefined, // let allowFrom resolve authorization
+            authorized: true,
             body: rawTextTrimmed,
           },
         }
