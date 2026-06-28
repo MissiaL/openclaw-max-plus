@@ -232,7 +232,11 @@ export async function sendMaxMediaMessage(
     const os = await import('node:os');
     const path = await import('node:path');
     nameForType = loaded.fileName ?? mediaPath;
-    tmpToCleanup = path.join(os.tmpdir(), `max-media-${Date.now()}-${loaded.fileName ?? 'file'}`);
+    // Never build a path from the remote-supplied filename (path traversal):
+    // strip to a sanitized basename and add entropy for uniqueness.
+    const safeName = path.basename(loaded.fileName ?? 'file').replace(/[^A-Za-z0-9._-]/g, '_');
+    const rand = Math.round(Math.random() * 1e9);
+    tmpToCleanup = path.join(os.tmpdir(), `max-media-${Date.now()}-${rand}-${safeName}`);
     await fs.writeFile(tmpToCleanup, loaded.buffer);
     uploadPath = tmpToCleanup;
   }
