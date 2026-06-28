@@ -1,6 +1,6 @@
 # openclaw-max – плагин MAX для OpenClaw
 
-Канал-плагин для подключения AI-ассистента [OpenClaw](https://openclaw.ai) к мессенджеру [MAX](https://max.ru) (ex-VK Teams / ICQ New).
+Канал-плагин для подключения AI-ассистента [OpenClaw](https://openclaw.ai) к мессенджеру [MAX](https://max.ru) (max.ru Bot API).
 
 ## Что это
 
@@ -8,32 +8,39 @@
 
 - Приём и отправку текстовых сообщений
 - Вложения (фото, видео, аудио, файлы)
-- Inline-кнопки (callback / link)
+- Inline-кнопки (callback / link) и выбор модели
 - Форматирование (markdown / HTML)
+- Стриминг ответа (`streamMode`: partial / block)
 - Long polling и Webhook
 - Мультиаккаунт
-- DM-security и pairing
+- DM-security, pairing, групповые политики
 
 ## Структура проекта
 
 ```
 openclaw-max/
-├── index.ts                # Точка входа плагина
 ├── openclaw.plugin.json    # Манифест плагина
 ├── package.json
 ├── tsconfig.json
 ├── README.md
 ├── src/
+│   ├── index.ts            # Точка входа плагина (register → channel)
 │   ├── types.ts            # TypeScript-типы MAX Bot API
-│   ├── polling.ts          # Long polling (приём обновлений)
-│   ├── api.ts              # HTTP-клиент MAX API (send/edit/delete/upload)
-│   ├── sender.ts           # Высокоуровневые send-хелперы
+│   ├── api.ts              # HTTP-клиент MAX API (send/edit/delete/upload/actions)
+│   ├── monitor.ts          # Long polling + webhook (приём обновлений, dispatch)
+│   ├── webhook.ts          # Обработчик webhook-запросов
+│   ├── send.ts             # Высокоуровневые send-хелперы (текст/медиа/edit)
 │   ├── channel.ts          # OpenClaw channel adapter
-│   ├── config.ts           # Резолвинг аккаунтов из конфига
-│   ├── media.ts            # Скачивание входящих вложений
-│   └── buttons.ts          # Inline-кнопки и callback-ответы
+│   ├── config-schema.ts    # Zod-схема конфига канала
+│   ├── accounts.ts         # Резолвинг аккаунтов из конфига
+│   ├── runtime.ts          # Доступ к OpenClaw runtime
+│   ├── actions.ts          # Действия/команды
+│   ├── model-buttons.ts    # Кнопки выбора модели
+│   ├── onboarding.ts       # Онбординг/настройка аккаунта
+│   ├── format.ts           # Форматирование текста
+│   └── sticker-cache.ts    # Кэш стикеров
 └── scripts/
-    ├── test-api.mjs        # Проверка токена и API
+    ├── test-api.mjs        # Проверка токена и API (GET /me + GET /updates)
     └── test-send.mjs       # Тест send + edit + delete
 ```
 
@@ -47,17 +54,30 @@ openclaw-max/
 4. Дождаться модерации (до 48ч по рабочим дням)
 5. После модерации: **Чат-боты → Интеграция → Получить токен**
 
-### 2. Установить плагин
+### 2. Собрать и подключить плагин
 
 ```bash
-# Скопировать папку плагина в extensions
-cp -r openclaw-max ~/.openclaw/extensions/openclaw-max
+cd openclaw-max
+npm install
+npm run build                          # собирает dist/ (entry: dist/index.js)
 
-# Загрузить плагин
-openclaw plugins load ~/.openclaw/extensions/openclaw-max
+# Подключить плагин к OpenClaw из локальной папки
+openclaw plugins install ./.           # или абсолютный путь к папке плагина
 ```
 
-### 3. Настроить конфиг
+Альтернатива для разработки — указать путь к плагину прямо в конфиге
+`~/.openclaw/openclaw.json`, тогда gateway грузит его из рабочей папки:
+
+```jsonc
+{
+  "plugins": {
+    "entries": { "openclaw-max": { "enabled": true } },
+    "load": { "paths": ["/путь/к/openclaw-max"] }
+  }
+}
+```
+
+### 3. Настроить канал
 
 Добавить секцию в `~/.openclaw/openclaw.json`:
 
@@ -65,18 +85,23 @@ openclaw plugins load ~/.openclaw/extensions/openclaw-max
 {
   "channels": {
     "max": {
+      "enabled": true,
+
       // Токен бота из business.max.ru → Чат-боты → Интеграция
       "botToken": "ваш_токен_бота",
 
+      // Политика личных сообщений (по умолчанию "pairing"):
+      //   "pairing"   — новый контакт проходит pairing-код
+      //   "allowlist" — только user_id из allowFrom
+      //   "open"      — любой (требует allowFrom: ["*"])
+      "dmPolicy": "allowlist",
+
       // Список user_id, которым разрешено писать боту
-      // Узнать свой user_id: написать боту, посмотреть в логах
+      // Узнать свой user_id: написать боту и посмотреть в логах
       "allowFrom": ["12345678"],
 
-      // Политика DM-доступа:
-      // "allowlist" — только из allowFrom (по умолчанию)
-      // "open" — любой может писать
-      // "pairing" — новые контакты проходят pairing-код
-      "dmSecurity": "allowlist"
+      // Режим стриминга ответа: "off" | "partial" | "block"
+      "streamMode": "partial"
     }
   }
 }
@@ -88,23 +113,52 @@ openclaw plugins load ~/.openclaw/extensions/openclaw-max
 openclaw gateway restart
 ```
 
-## Настройка — описание полей
+> Можно проверить регистрацию канала: `openclaw plugins inspect max --runtime`.
 
-| Поле | Тип | Обязательно | Описание |
-|------|-----|-------------|----------|
-| `botToken` | string | да | API-токен бота |
-| `allowFrom` | string[] | да* | Список разрешённых user_id |
-| `dmSecurity` | string | нет | Политика: allowlist / open / pairing |
+## Индикатор «печатает…» (typing)
 
-\* Обязательно при `dmSecurity: "allowlist"` (по умолчанию).
+MAX гасит индикатор «печатает…» через несколько секунд, поэтому плагин
+переотправляет его весь ход ответа через keepalive хоста. Частота
+переотправки задаётся **глобальным** параметром `session.typingIntervalSeconds`
+(по умолчанию 6с). Одиночный `typing_on` в MAX живёт ~5–6с, поэтому для
+непрерывного индикатора рекомендуется значение **4**:
+
+```bash
+openclaw config set session.typingIntervalSeconds 4
+openclaw gateway restart
+```
+
+> Параметр общий для всех каналов (затронет и Telegram — для него 4с тоже
+> безопасно). Индикатор «печатает…» бота отображается **в мобильном клиенте
+> MAX**; веб-версия его показывает ненадёжно — это особенность клиента MAX.
+
+## Настройка — основные поля канала
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `enabled` | boolean | Включить канал |
+| `botToken` | string | API-токен бота (или `tokenFile` — путь к файлу с токеном) |
+| `dmPolicy` | string | `pairing` (по умолч.) / `allowlist` / `open` |
+| `allowFrom` | string[] | Разрешённые user_id (для `open` — `["*"]`) |
+| `groupPolicy` | string | Политика групп, по умолч. `allowlist` |
+| `groupAllowFrom` | string[] | Разрешённые user_id в группах |
+| `groups` | object | Пер-групповые настройки (`requireMention`, `tools`, `skills`, …) |
+| `streamMode` | string | `off` / `partial` / `block` |
+| `webhookUrl` | string | URL webhook (если не используется long polling) |
+| `webhookSecret` | string | Секрет для валидации webhook |
+| `responsePrefix` | string | Префикс к ответам бота |
+| `mediaMaxMb` | number | Лимит размера медиа |
+| `accounts` | object | Дополнительные аккаунты (мультиаккаунт) |
+
+Полный список — в [src/config-schema.ts](src/config-schema.ts).
 
 ## Использование
 
 ### Как написать боту
 
-1. Найти бота в MAX по нику (например `@idИНН_bot`)
+1. Найти бота в MAX по нику
 2. Нажать **Старт** или отправить любое сообщение
-3. Бот ответит, если ваш `user_id` в `allowFrom`
+3. Бот ответит, если ваш `user_id` разрешён политикой (`dmPolicy` / `allowFrom`)
 
 ### Как узнать свой user_id
 
@@ -112,7 +166,7 @@ openclaw gateway restart
 
 ```bash
 openclaw logs --follow
-# В логах будет: sender.user_id: 12345678
+# В логах будет sender.user_id входящего сообщения
 ```
 
 Или запустить тест-скрипт:
@@ -121,12 +175,6 @@ openclaw logs --follow
 MAX_BOT_TOKEN=xxx node scripts/test-api.mjs
 # В разделе updates будет виден ваш user_id
 ```
-
-### allowFrom и pairing
-
-- **allowlist** (по умолчанию): только user_id из списка могут общаться с ботом
-- **open**: любой пользователь MAX может писать боту
-- **pairing**: новый пользователь получает код, который нужно подтвердить у владельца
 
 ## Мультиаккаунт
 
@@ -145,7 +193,7 @@ MAX_BOT_TOKEN=xxx node scripts/test-api.mjs
         "zaya": {
           "botToken": "токен_второго_бота",
           "allowFrom": ["87654321"],
-          "dmSecurity": "open"
+          "dmPolicy": "open"
         }
       }
     }
@@ -153,32 +201,25 @@ MAX_BOT_TOKEN=xxx node scripts/test-api.mjs
 }
 ```
 
-Обращение к конкретному аккаунту:
-
-```
-openclaw --account zaya send "Привет из второго бота"
-```
-
 ## Разработка
 
 ### Требования
 
-- Node.js 18+ (встроенный fetch)
-- TypeScript 5+
+- Node.js 20+ (встроенный fetch)
+- TypeScript 6
 
-### Сборка
+### Команды
 
 ```bash
-cd openclaw-max
 npm install
-npm run build          # npx tsc
+npm run build          # сборка dist/
+npm run typecheck      # tsc --noEmit
+npm run lint           # eslint (lint:fix — с автофиксом)
+npm run format         # prettier --write (format:check — проверка)
+npm test               # vitest (test:watch — watch-режим)
 ```
 
-### Проверка типов
-
-```bash
-npx tsc --noEmit
-```
+Перед коммитом: `npm run typecheck && npm run lint && npm test`.
 
 ### Тест API (проверка что токен работает)
 
@@ -193,41 +234,27 @@ MAX_BOT_TOKEN=xxx node scripts/test-api.mjs <chat_id>
 ### Тест отправки (send + edit + delete)
 
 ```bash
-# Полный цикл: отправить → подождать → отредактировать → подождать → удалить
 MAX_BOT_TOKEN=xxx node scripts/test-send.mjs <chat_id> "Текст сообщения"
-```
-
-### Запуск polling вручную
-
-```typescript
-import { startPolling } from "./polling.js";
-
-const stop = startPolling("мой_токен", async (update) => {
-  console.log("От:", update.message.sender?.user_id);
-  console.log("Текст:", update.message.body.text);
-});
-
-// Остановить через 60 сек:
-setTimeout(stop, 60_000);
 ```
 
 ## MAX Bot API — краткая справка
 
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| GET /me | Информация о боте | user_id, name, username |
-| GET /updates | Long polling | marker, timeout, types |
-| POST /messages | Отправить | ?chat_id или ?user_id |
-| PUT /messages | Редактировать | ?message_id (до 24ч) |
-| DELETE /messages | Удалить | ?message_id (до 24ч) |
-| POST /answers | Ответ на callback | ?callback_id |
+| GET | `/me` | Информация о боте (user_id, name, username) |
+| GET | `/updates` | Long polling (marker, timeout, types) |
+| POST | `/messages` | Отправить (`?chat_id` или `?user_id`) |
+| PUT | `/messages` | Редактировать (`?message_id`) |
+| DELETE | `/messages` | Удалить (`?message_id`) |
+| POST | `/chats/{chatId}/actions` | Действия (`typing_on`, `mark_seen`, …) |
+| POST | `/answers` | Ответ на callback (`?callback_id`) |
+| POST | `/subscriptions` | Подписка на webhook |
+| POST | `/uploads` | Загрузка медиа |
 
-Авторизация: заголовок `Authorization: <token>`
-Лимит: 30 запросов/сек
-Документация: [dev.max.ru/docs-api](https://dev.max.ru/docs-api)
+- Авторизация: заголовок `Authorization: <token>` (query-параметр `access_token` устарел).
+- Документация: [dev.max.ru/docs-api](https://dev.max.ru/docs-api)
+- ⚠️ `GET /chats` (список чатов) помечен устаревшим с июня 2026; одиночный `GET /chats/{chatId}` работает.
 
-## Авторы
+## Лицензия
 
-- **Яков** (@Helpdesk_VP_bot) — архитектура, координация
-- **Банзай** (@KotBanzaiBot) — реализация модулей, типы, тесты
-- **openclaw-max subagent** — интеграция с OpenClaw Plugin SDK
+См. [LICENSE](LICENSE).
