@@ -132,6 +132,36 @@ openclaw gateway restart
 > безопасно). Индикатор «печатает…» бота отображается **в мобильном клиенте
 > MAX**; веб-версия его показывает ненадёжно — это особенность клиента MAX.
 
+## Команды бота
+
+Меню команд бота задаётся полем `commands` в конфиге канала и регистрируется в
+MAX при старте провайдера (через `PATCH /me`). Каждая команда — `{ name,
+description }` (`name` 1–64 симв., `description` до 128, максимум 32 команды):
+
+```jsonc
+{
+  "channels": {
+    "max": {
+      "commands": [
+        { "name": "status",  "description": "Статус и лимиты подписки" },
+        { "name": "new",     "description": "Начать новую сессию" },
+        { "name": "stop",    "description": "Прервать текущую задачу" },
+        { "name": "restart", "description": "Перезапустить бота на сервере" }
+      ]
+    }
+  }
+}
+```
+
+После перезапуска gateway в логах будет `Registered N bot commands`, а команды
+появятся в меню бота (мобильный клиент MAX). Проверить регистрацию на стороне
+MAX: `GET /me` вернёт массив `commands`.
+
+> Регистрация **меню** команд и их **обработка** — разные вещи. `name` команд —
+> это встроенные slash-команды OpenClaw (`/status`, `/new`, `/stop`, …), которые
+> обрабатывает ядро. На момент написания доставка ответов на команды через
+> MAX-канal в отладке (см. CLAUDE.md).
+
 ## Настройка — основные поля канала
 
 | Поле | Тип | Описание |
@@ -142,12 +172,14 @@ openclaw gateway restart
 | `allowFrom` | string[] | Разрешённые user_id (для `open` — `["*"]`) |
 | `groupPolicy` | string | Политика групп, по умолч. `allowlist` |
 | `groupAllowFrom` | string[] | Разрешённые user_id в группах |
-| `groups` | object | Пер-групповые настройки (`requireMention`, `tools`, `skills`, …) |
+| `groups` | object | Пер-групповые настройки (`requireMention`, `allowFrom`, `tools`, `skills`, …) |
 | `streamMode` | string | `off` / `partial` / `block` |
 | `webhookUrl` | string | URL webhook (если не используется long polling) |
-| `webhookSecret` | string | Секрет для валидации webhook |
+| `webhookSecret` | string | Секрет для валидации webhook (рекомендуется в webhook-режиме) |
+| `webhookPath` | string | Путь webhook-эндпоинта (по умолч. из `webhookUrl` или `/max`) |
 | `responsePrefix` | string | Префикс к ответам бота |
 | `mediaMaxMb` | number | Лимит размера медиа |
+| `commands` | object[] | Меню команд бота (`{ name, description }`) — см. «Команды бота» |
 | `accounts` | object | Дополнительные аккаунты (мультиаккаунт) |
 
 Полный список — в [src/config-schema.ts](src/config-schema.ts).
@@ -242,18 +274,21 @@ MAX_BOT_TOKEN=xxx node scripts/test-send.mjs <chat_id> "Текст сообще�
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
 | GET | `/me` | Информация о боте (user_id, name, username) |
+| PATCH | `/me` | Изменить бота (в т.ч. `commands` — меню команд) |
 | GET | `/updates` | Long polling (marker, timeout, types) |
 | POST | `/messages` | Отправить (`?chat_id` или `?user_id`) |
 | PUT | `/messages` | Редактировать (`?message_id`) |
 | DELETE | `/messages` | Удалить (`?message_id`) |
 | POST | `/chats/{chatId}/actions` | Действия (`typing_on`, `mark_seen`, …) |
 | POST | `/answers` | Ответ на callback (`?callback_id`) |
-| POST | `/subscriptions` | Подписка на webhook |
+| POST · GET · DELETE | `/subscriptions` | Webhook: подписка / список / отписка |
 | POST | `/uploads` | Загрузка медиа |
 
 - Авторизация: заголовок `Authorization: <token>` (query-параметр `access_token` устарел).
 - Документация: [dev.max.ru/docs-api](https://dev.max.ru/docs-api)
 - ⚠️ `GET /chats` (список чатов) помечен устаревшим с июня 2026; одиночный `GET /chats/{chatId}` работает.
+- ⚠️ Команды бота задаются через `PATCH /me` (поле `commands`); отдельного `POST /me/commands` в API нет.
+- ⚠️ **Миграция домена:** до **19.07.2026** перенести запросы с `platform-api.max.ru` на `platform-api2.max.ru` (+ сертификат Минцифры). В коде хост пока зашит — см. CLAUDE.md.
 
 ## Лицензия
 
