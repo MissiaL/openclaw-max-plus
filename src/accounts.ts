@@ -2,8 +2,22 @@
  * MAX account resolution — reads config and produces a resolved account object.
  */
 
+import { readFileSync } from 'node:fs';
+
 import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from 'openclaw/plugin-sdk/core';
+
+/** Read a bot token from a file path (trimmed). Returns undefined on any error. */
+function readTokenFile(path: string | undefined): string | undefined {
+  const p = path?.trim();
+  if (!p) return undefined;
+  try {
+    const t = readFileSync(p, 'utf8').trim();
+    return t || undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export interface MaxAccountConfig {
   enabled?: boolean;
@@ -117,6 +131,12 @@ export function resolveMaxAccount(params: {
     } else if (process.env.MAX_BOT_TOKEN?.trim()) {
       token = process.env.MAX_BOT_TOKEN.trim();
       tokenSource = 'env';
+    } else {
+      const fileToken = readTokenFile(accountConfig.tokenFile);
+      if (fileToken) {
+        token = fileToken;
+        tokenSource = 'file';
+      }
     }
   } else {
     // Named account
@@ -124,6 +144,7 @@ export function resolveMaxAccount(params: {
     accountConfig = {
       enabled: raw.enabled !== false,
       botToken: raw.botToken as string | undefined,
+      tokenFile: raw.tokenFile as string | undefined,
       name: raw.name as string | undefined,
       dmPolicy: raw.dmPolicy as string | undefined,
       allowFrom: raw.allowFrom as Array<string | number> | undefined,
@@ -140,6 +161,12 @@ export function resolveMaxAccount(params: {
     if (accountConfig.botToken?.trim()) {
       token = accountConfig.botToken.trim();
       tokenSource = 'config';
+    } else {
+      const fileToken = readTokenFile(accountConfig.tokenFile);
+      if (fileToken) {
+        token = fileToken;
+        tokenSource = 'file';
+      }
     }
   }
 

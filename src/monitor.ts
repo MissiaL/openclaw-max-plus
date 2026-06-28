@@ -181,16 +181,8 @@ async function dispatchUpdate(update: MaxUpdate, opts: MaxMonitorOptions): Promi
       // Skip messages from the bot itself
       if (opts.botUserId && update.message.sender?.user_id === opts.botUserId) break;
       statusSink?.({ lastInboundAt: Date.now() });
-      // Mark message as read + show typing indicator
-      const chatIdForRead = update.message.recipient?.chat_id;
-      if (chatIdForRead) {
-        opts.api.sendAction(chatIdForRead, 'mark_seen').catch((err) => {
-          log?.debug?.(`[${account.accountId}] mark_seen failed: ${String(err)}`);
-        });
-        opts.api.sendAction(chatIdForRead, 'typing_on').catch((err) => {
-          log?.debug?.(`[${account.accountId}] typing_on failed: ${String(err)}`);
-        });
-      }
+      // mark_seen / typing are sent inside processIncomingMessage only AFTER the
+      // sender passes policy checks (avoid leaking presence to blocked users).
       await processIncomingMessage(update.message, update.user_locale, opts);
       break;
     }
@@ -210,16 +202,7 @@ async function dispatchUpdate(update: MaxUpdate, opts: MaxMonitorOptions): Promi
         `[${account.accountId}] Message edited: ${update.message?.body?.mid} text="${update.message?.body?.text ?? '<null>'}" hasBody=${!!update.message?.body}`,
       );
       statusSink?.({ lastInboundAt: Date.now() });
-      // Mark as read + show typing indicator
-      const chatIdForEditRead = update.message.recipient?.chat_id;
-      if (chatIdForEditRead) {
-        opts.api.sendAction(chatIdForEditRead, 'mark_seen').catch((err) => {
-          log?.debug?.(`[${account.accountId}] mark_seen failed: ${String(err)}`);
-        });
-        opts.api.sendAction(chatIdForEditRead, 'typing_on').catch((err) => {
-          log?.debug?.(`[${account.accountId}] typing_on failed: ${String(err)}`);
-        });
-      }
+      // mark_seen / typing are sent inside processIncomingMessage after policy checks.
       // Process edited message through the same pipeline as new messages.
       // Use a unique mid suffix to avoid OpenClaw dedup (same mid = skipped).
       const editedMessage = { ...update.message };
@@ -485,6 +468,23 @@ export async function processIncomingMessage(
         );
         return;
       }
+
+      // Enforce the sender allowlist when one is configured (per-group
+      // allowFrom, else account-level groupAllowFrom). When none is set, any
+      // member of an allowed chat passes (still mention-gated below).
+      const groupCfg = groups[chatIdStr] ?? groups['*'];
+      const senderAllow = ((groupCfg?.allowFrom ??
+        account.config.groupAllowFrom ??
+        []) as Array<string | number>).map(String);
+      if (senderAllow.length > 0) {
+        const senderStr = String(senderId);
+        if (!senderAllow.includes(senderStr) && !senderAllow.includes('*')) {
+          log?.debug?.(
+            `[${account.accountId}] Blocked group message (sender ${senderStr} not in groupAllowFrom)`,
+          );
+          return;
+        }
+      }
     }
 
     // Require mention in groups
@@ -494,6 +494,15 @@ export async function processIncomingMessage(
       log?.debug?.(`[${account.accountId}] Skipping group message (not mentioned)`);
       return;
     }
+  }
+
+  // Sender passed all policy checks — mark the message read now (kept after the
+  // checks to avoid leaking presence to blocked users). The typing indicator is
+  // driven by the reply dispatcher keepalive below.
+  if (chatId != null) {
+    opts.api.sendAction(chatId, 'mark_seen').catch((err) => {
+      log?.debug?.(`[${account.accountId}] mark_seen failed: ${String(err)}`);
+    });
   }
 
   // Resolve agent route

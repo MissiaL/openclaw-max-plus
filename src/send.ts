@@ -5,6 +5,7 @@
 import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
 
 import { resolveMaxAccount } from './accounts.js';
+import { getMaxRuntime } from './runtime.js';
 import {
   MaxApi,
   type MaxAttachment,
@@ -219,8 +220,25 @@ export async function sendMaxMediaMessage(
   const token = resolveToken(opts);
   const api = new MaxApi({ token });
 
-  // Detect media type from path
-  const ext = mediaPath.split('.').pop()?.toLowerCase();
+  // uploadMedia reads string sources from disk, so a remote http(s) URL must be
+  // downloaded to a temp file first (channel.ts passes through remote mediaUrls).
+  let uploadPath = mediaPath;
+  let nameForType = mediaPath;
+  let tmpToCleanup: string | undefined;
+  if (/^https?:\/\//i.test(mediaPath)) {
+    const maxBytes = ((opts as { mediaMaxMb?: number }).mediaMaxMb ?? 20) * 1024 * 1024;
+    const loaded = await getMaxRuntime().channel.media.fetchRemoteMedia({ url: mediaPath, maxBytes });
+    const fs = await import('node:fs/promises');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    nameForType = loaded.fileName ?? mediaPath;
+    tmpToCleanup = path.join(os.tmpdir(), `max-media-${Date.now()}-${loaded.fileName ?? 'file'}`);
+    await fs.writeFile(tmpToCleanup, loaded.buffer);
+    uploadPath = tmpToCleanup;
+  }
+
+  // Detect media type from the file name (strip any query string)
+  const ext = nameForType.split('?')[0].split('.').pop()?.toLowerCase();
   let mediaType: 'image' | 'video' | 'audio' | 'file' = 'file';
   if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext ?? '')) {
     mediaType = 'image';
@@ -230,8 +248,13 @@ export async function sendMaxMediaMessage(
     mediaType = 'audio';
   }
 
-  // Upload media
-  const uploadResult = await api.uploadMedia(mediaType, mediaPath);
+  // Upload media; remove the temp file once the upload token is obtained.
+  const uploadResult = await api.uploadMedia(mediaType, uploadPath).finally(async () => {
+    if (tmpToCleanup) {
+      const fs = await import('node:fs/promises');
+      await fs.unlink(tmpToCleanup).catch(() => {});
+    }
+  });
 
   // Build attachment — MAX requires token from upload response
   const attachments: MaxAttachment[] = [
