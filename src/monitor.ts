@@ -18,6 +18,14 @@ import {
   type MaxUpdate,
   type MaxUser,
 } from './api.js';
+import {
+  flushChatRegistry,
+  markTitleFetched,
+  needsTitle,
+  removeChat,
+  setChatMeta,
+  upsertChat,
+} from './chat-registry.js';
 import { getMaxRuntime } from './runtime.js';
 import {
   answerMaxCallback,
@@ -68,71 +76,77 @@ async function startMaxPollingLoop(opts: MaxMonitorOptions): Promise<void> {
   let consecutiveErrors = 0;
 
   log?.info(`[${account.accountId}] MAX long-polling started`);
+  seedChatsFromConfig(account); // once, outside the reconnect loop
 
-  while (!abortSignal.aborted) {
-    try {
-      const resp = await api.getUpdates(
-        {
-          timeout: 30,
-          marker: marker ?? undefined,
-          types: [
-            'message_created',
-            'message_callback',
-            'message_edited',
-            'message_removed',
-            'bot_started',
-            'bot_added',
-            'bot_removed',
-          ],
-        },
-        abortSignal,
-      );
-
-      consecutiveErrors = 0;
-
-      if (resp.marker != null) {
-        marker = resp.marker;
-      }
-
-      for (const update of resp.updates) {
-        if (abortSignal.aborted) break;
-        try {
-          await dispatchUpdate(update, opts);
-        } catch (err) {
-          log?.error(
-            `[${account.accountId}] Error dispatching update ${update.update_type}: ${String(err)}`,
-          );
-        }
-      }
-    } catch (err) {
-      if (abortSignal.aborted) break;
-
-      // Fatal auth error: stop polling instead of hammering with a bad token.
-      const status = err instanceof MaxApiError ? err.status : undefined;
-      if (status === 401 || status === 403) {
-        log?.error(`[${account.accountId}] Polling stopped: auth error ${status}`);
-        break;
-      }
-
-      consecutiveErrors += 1;
-
-      // A stale marker can wedge the loop; drop it after repeated failures.
-      if (consecutiveErrors >= 3 && marker != null) {
-        log?.error(
-          `[${account.accountId}] Resetting poll marker after ${consecutiveErrors} consecutive errors`,
+  try {
+    while (!abortSignal.aborted) {
+      try {
+        const resp = await api.getUpdates(
+          {
+            timeout: 30,
+            marker: marker ?? undefined,
+            types: [
+              'message_created',
+              'message_callback',
+              'message_edited',
+              'message_removed',
+              'bot_started',
+              'bot_added',
+              'bot_removed',
+              'chat_title_changed',
+            ],
+          },
+          abortSignal,
         );
-        marker = null;
-      }
 
-      // Exponential backoff with jitter, capped at 30s (longer base on 429).
-      const base = status === 429 ? 5000 : 1000;
-      const delay = Math.min(base * 2 ** (consecutiveErrors - 1), 30_000);
-      const jitter = Math.round(Math.random() * 500);
-      log?.error(
-        `[${account.accountId}] Polling error (#${consecutiveErrors}, status=${status ?? 'n/a'}); retry in ${delay}ms: ${String(err)}`,
-      );
-      await sleep(delay + jitter);
+        consecutiveErrors = 0;
+
+        if (resp.marker != null) {
+          marker = resp.marker;
+        }
+
+        for (const update of resp.updates) {
+          if (abortSignal.aborted) break;
+          try {
+            await dispatchUpdate(update, opts);
+          } catch (err) {
+            log?.error(
+              `[${account.accountId}] Error dispatching update ${update.update_type}: ${String(err)}`,
+            );
+          }
+        }
+      } catch (err) {
+        if (abortSignal.aborted) break;
+
+        // Fatal auth error: stop polling instead of hammering with a bad token.
+        const status = err instanceof MaxApiError ? err.status : undefined;
+        if (status === 401 || status === 403) {
+          log?.error(`[${account.accountId}] Polling stopped: auth error ${status}`);
+          break;
+        }
+
+        consecutiveErrors += 1;
+
+        // A stale marker can wedge the loop; drop it after repeated failures.
+        if (consecutiveErrors >= 3 && marker != null) {
+          log?.error(
+            `[${account.accountId}] Resetting poll marker after ${consecutiveErrors} consecutive errors`,
+          );
+          marker = null;
+        }
+
+        // Exponential backoff with jitter, capped at 30s (longer base on 429).
+        const base = status === 429 ? 5000 : 1000;
+        const delay = Math.min(base * 2 ** (consecutiveErrors - 1), 30_000);
+        const jitter = Math.round(Math.random() * 500);
+        log?.error(
+          `[${account.accountId}] Polling error (#${consecutiveErrors}, status=${status ?? 'n/a'}); retry in ${delay}ms: ${String(err)}`,
+        );
+        await sleep(delay + jitter);
+      }
     }
+  } finally {
+    flushChatRegistry(account.accountId); // dump debounced writes before exit
   }
 
   log?.info(`[${account.accountId}] MAX long-polling stopped`);
@@ -145,6 +159,7 @@ async function startMaxWebhook(opts: MaxMonitorOptions & { webhookUrl: string })
   const webhookSecret = account.config.webhookSecret?.trim();
 
   log?.info(`[${account.accountId}] MAX webhook mode: ${webhookUrl} (path: ${webhookPath})`);
+  seedChatsFromConfig(account); // once at start
 
   // Register webhook handler
   const target: MaxWebhookTarget = {
@@ -200,12 +215,14 @@ async function startMaxWebhook(opts: MaxMonitorOptions & { webhookUrl: string })
   }
 
   unregister();
+  flushChatRegistry(account.accountId); // dump debounced writes before exit
   log?.info(`[${account.accountId}] MAX webhook mode stopped`);
 }
 
 // ── Dispatch ──
 
-async function dispatchUpdate(update: MaxUpdate, opts: MaxMonitorOptions): Promise<void> {
+/** @internal - Exported for testing only. */
+export async function dispatchUpdate(update: MaxUpdate, opts: MaxMonitorOptions): Promise<void> {
   const { log, account, statusSink } = opts;
 
   switch (update.update_type) {
@@ -223,6 +240,9 @@ async function dispatchUpdate(update: MaxUpdate, opts: MaxMonitorOptions): Promi
         );
         break;
       }
+      // Record the chat in the registry before any skip — knowing a group/channel
+      // exists must not depend on who sent the message or on policy gates.
+      recordInboundChat(update.message, opts);
       // Skip messages from the bot itself
       if (opts.botUserId && update.message.sender?.user_id === opts.botUserId) break;
       statusSink?.({ lastInboundAt: Date.now() });
@@ -241,6 +261,8 @@ async function dispatchUpdate(update: MaxUpdate, opts: MaxMonitorOptions): Promi
 
     case 'message_edited': {
       if (!update.message) break;
+      // Register the chat before any skip / clone (see message_created).
+      recordInboundChat(update.message, opts);
       // Skip edits from the bot itself
       if (opts.botUserId && update.message.sender?.user_id === opts.botUserId) break;
       log?.debug?.(
@@ -297,12 +319,30 @@ async function dispatchUpdate(update: MaxUpdate, opts: MaxMonitorOptions): Promi
     }
 
     case 'bot_added': {
-      log?.info(`[${account.accountId}] Bot added to chat ${update.chat_id}`);
+      const chatId = update.chat_id;
+      log?.info(`[${account.accountId}] Bot added to chat ${chatId}`);
+      if (chatId != null) {
+        upsertChat(account.accountId, {
+          chatId,
+          kind: update.is_channel ? 'channel' : 'group',
+          seenAt: update.timestamp || Date.now(),
+        });
+        await maybeFetchChatMeta(chatId, opts);
+      }
       break;
     }
 
     case 'bot_removed': {
-      log?.info(`[${account.accountId}] Bot removed from chat ${update.chat_id}`);
+      const chatId = update.chat_id;
+      log?.info(`[${account.accountId}] Bot removed from chat ${chatId}`);
+      if (chatId != null) removeChat(account.accountId, chatId);
+      break;
+    }
+
+    case 'chat_title_changed': {
+      const chatId = update.chat_id;
+      const title = typeof update.title === 'string' ? update.title : undefined;
+      if (chatId != null && title) setChatMeta(account.accountId, chatId, { title });
       break;
     }
 
@@ -1017,6 +1057,72 @@ async function deliverMaxReply(params: {
     } catch (err) {
       log?.error(`[${account.accountId}] MAX media send failed: ${String(err)}`);
     }
+  }
+}
+
+// ── Chat registry helpers ──
+
+/**
+ * Record a group/channel chat seen on an inbound message. Fire-and-forget so it
+ * never delays the reply pipeline; dialogs (DMs) are ignored. Called before the
+ * bot-self skip so a chat the bot only posts to is still discovered.
+ * @internal - Exported for testing only.
+ */
+export function recordInboundChat(message: MaxMessage, opts: MaxMonitorOptions): void {
+  const chatId = message.recipient?.chat_id;
+  const chatType = message.recipient?.chat_type;
+  if (chatId == null) return;
+  if (chatType !== 'chat' && chatType !== 'channel') {
+    if (chatType && chatType !== 'dialog') {
+      // Unknown non-dialog chat type — surface it rather than silently dropping.
+      opts.log?.debug?.(
+        `[${opts.account.accountId}] Unhandled chat_type for registry: ${chatType}`,
+      );
+    }
+    return;
+  }
+  upsertChat(opts.account.accountId, {
+    chatId,
+    kind: chatType === 'channel' ? 'channel' : 'group',
+    seenAt: message.timestamp || Date.now(),
+  });
+  void maybeFetchChatMeta(chatId, opts);
+}
+
+/**
+ * Lazily fetch chat title + type via getChat (non-deprecated) at most once per
+ * chat per session. Marks the attempt up front (sync, before the await) so a
+ * burst of messages fires only one request. Best-effort — never throws.
+ */
+async function maybeFetchChatMeta(chatId: number, opts: MaxMonitorOptions): Promise<void> {
+  const { account, api, log } = opts;
+  if (!needsTitle(account.accountId, chatId)) return;
+  markTitleFetched(account.accountId, chatId);
+  try {
+    const chat = await api.getChat(chatId);
+    const meta: { title?: string; kind?: 'group' | 'channel' } = {};
+    if (chat?.title) meta.title = chat.title;
+    if (chat?.type === 'channel' || chat?.type === 'chat') {
+      meta.kind = chat.type === 'channel' ? 'channel' : 'group';
+    }
+    if (meta.title != null || meta.kind != null) setChatMeta(account.accountId, chatId, meta);
+  } catch (err) {
+    log?.debug?.(`[${account.accountId}] getChat(${chatId}) for meta failed: ${String(err)}`);
+  }
+}
+
+/** Seed the registry with numeric chat ids already present in the account config. */
+function seedChatsFromConfig(account: ResolvedMaxAccount): void {
+  const groups = account.config.groups ?? {};
+  const now = Date.now();
+  for (const key of Object.keys(groups)) {
+    if (key === '*') continue;
+    const chatId = Number(key);
+    if (!Number.isFinite(chatId)) continue;
+    // kind:'group' is a placeholder; config carries no chat type. The first
+    // real update (bot_added.is_channel / message.recipient.chat_type) or the
+    // lazy getChat corrects it to 'channel' where applicable.
+    upsertChat(account.accountId, { chatId, kind: 'group', seenAt: now });
   }
 }
 

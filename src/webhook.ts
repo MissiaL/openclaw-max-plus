@@ -203,6 +203,7 @@ export async function subscribeMaxWebhook(params: {
       'bot_started',
       'bot_added',
       'bot_removed',
+      'chat_title_changed',
     ],
     secret,
   });
