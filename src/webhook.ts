@@ -2,6 +2,7 @@
  * MAX webhook handler — HTTP endpoint for receiving webhook updates
  */
 
+import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
@@ -32,6 +33,36 @@ function normalizeWebhookPath(raw: string): string {
     return withSlash.slice(0, -1);
   }
   return withSlash;
+}
+
+function timingSafeEqualStr(a: string, b: string): boolean {
+  const ba = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ba.length !== bb.length) return false;
+  return timingSafeEqual(ba, bb);
+}
+
+/**
+ * Collect all webhook paths configured for the MAX channel (top-level account
+ * plus accounts.*), so the plugin can register an HTTP route per path in
+ * register(api). Returns [] when no account uses webhook mode (polling-only).
+ */
+export function resolveMaxWebhookPaths(config: OpenClawConfig): string[] {
+  const paths = new Set<string>();
+  const max = (config as { channels?: { max?: Record<string, unknown> } })?.channels?.max;
+  if (!max) return [];
+  const collect = (section: Record<string, unknown> | undefined): void => {
+    if (!section) return;
+    const url = typeof section.webhookUrl === 'string' ? section.webhookUrl : undefined;
+    const p = typeof section.webhookPath === 'string' ? section.webhookPath : undefined;
+    if (url || p) paths.add(resolveMaxWebhookPath(p, url));
+  };
+  collect(max);
+  const accounts = max.accounts as Record<string, Record<string, unknown>> | undefined;
+  if (accounts && typeof accounts === 'object') {
+    for (const acc of Object.values(accounts)) collect(acc);
+  }
+  return [...paths];
 }
 
 export function resolveMaxWebhookPath(webhookPath?: string, webhookUrl?: string): string {
@@ -115,15 +146,19 @@ export async function handleMaxWebhookRequest(
 
   const update = raw as MaxUpdate;
 
-  // Find matching target by secret
+  // Match a target by secret (constant-time). A secretless target is accepted
+  // ONLY when no secret-protected target shares this path — otherwise a
+  // secretless sibling would let a forged request bypass the secret of a
+  // co-located account.
   let matchedTarget: MaxWebhookTarget | undefined;
   for (const target of targets) {
-    if (target.secret && target.secret === webhookSecret) {
+    if (target.secret && timingSafeEqualStr(target.secret, webhookSecret)) {
       matchedTarget = target;
       break;
-    } else if (!target.secret) {
-      matchedTarget = target;
     }
+  }
+  if (!matchedTarget && !targets.some((t) => t.secret)) {
+    matchedTarget = targets.find((t) => !t.secret);
   }
 
   if (!matchedTarget) {

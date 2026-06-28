@@ -107,15 +107,36 @@ export class MaxApi {
         signal: controller.signal,
       });
 
-      const json = (await res.json().catch(() => null)) as T;
+      // Read the body defensively: prefer text() so non-JSON error pages
+      // (e.g. 502/503 HTML from a gateway) are preserved instead of swallowed
+      // into `null`; fall back to json() for environments without text().
+      let raw = '';
+      let json: T;
+      if (typeof res.text === 'function') {
+        raw = await res.text();
+        try {
+          json = (raw ? JSON.parse(raw) : null) as T;
+        } catch {
+          json = null as T;
+        }
+      } else {
+        json = (await (res as Response).json().catch(() => null)) as T;
+        raw = json ? JSON.stringify(json) : '';
+      }
 
       if (!res.ok) {
-        const errDetail = json ? JSON.stringify(json) : '(no body)';
-        const bodyDetail = body ? JSON.stringify(body) : '(no body)';
+        // Log the raw response body, but only the size of the request body —
+        // it may contain PII (message text, contacts, coordinates).
+        const errDetail = raw || '(no body)';
+        const reqSize = body ? `${JSON.stringify(body).length} bytes` : '(no body)';
         console.error(
-          `[MAX API] ${method} ${path} → ${res.status}: ${errDetail}\n  Request body: ${bodyDetail}`,
+          `[MAX API] ${method} ${path} → ${res.status}: ${errDetail}\n  Request body: ${reqSize}`,
         );
-        throw new MaxApiError(`MAX API ${method} ${path} → ${res.status}`, res.status, json);
+        throw new MaxApiError(
+          `MAX API ${method} ${path} → ${res.status}`,
+          res.status,
+          json ?? (raw as unknown),
+        );
       }
 
       return json;
@@ -154,10 +175,20 @@ export class MaxApi {
           body,
         );
       } catch (err) {
+        // Match defensively: MAX may report this as code "attachment.not.ready"
+        // or with a longer code/message (e.g. errors.process.attachment.file.not.processed).
+        const eb =
+          err instanceof MaxApiError
+            ? (err.body as { code?: string; message?: string } | string | undefined)
+            : undefined;
+        const blob = (
+          typeof eb === 'string' ? eb : `${eb?.code ?? ''} ${eb?.message ?? ''}`
+        ).toLowerCase();
         const notReady =
           err instanceof MaxApiError &&
           err.status === 400 &&
-          (err.body as { code?: string } | undefined)?.code === 'attachment.not.ready';
+          blob.includes('attachment') &&
+          (blob.includes('not') || blob.includes('process'));
         if (!notReady || attempt >= maxAttempts) throw err;
         // Increasing backoff: 1s, 1.5s, 2.25s, … capped at 5s (≈18s total over 8 tries).
         const delayMs = Math.min(1000 * Math.pow(1.5, attempt - 1), 5000);
@@ -268,7 +299,10 @@ export class MaxApi {
   // ── Commands ──
 
   async setMyCommands(commands: MaxBotCommand[]): Promise<MaxSimpleResult> {
-    return this.request('POST', '/me/commands', undefined, { commands });
+    // MAX has no POST /me/commands endpoint. Bot commands are set via PATCH /me
+    // (editMyInfo) where `commands` is a field of the BotPatch body. Sending only
+    // `{ commands }` is a partial update and leaves other bot fields untouched.
+    return this.request('PATCH', '/me', undefined, { commands });
   }
 
   // ── Upload ──

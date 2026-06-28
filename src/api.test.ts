@@ -243,9 +243,9 @@ describe('MaxApi', () => {
       await api.setMyCommands(commands);
 
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/me/commands'),
+        expect.stringContaining('/me'),
         expect.objectContaining({
-          method: 'POST',
+          method: 'PATCH',
           body: JSON.stringify({ commands }),
         }),
       );

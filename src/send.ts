@@ -308,21 +308,22 @@ export async function sendMaxContact(
   const token = resolveToken(opts);
   const api = new MaxApi({ token });
 
-  // MAX API requires either contactId (MAX user_id) or vcfInfo (VCard string)
-  // Without either, returns 400 "Missing info for contact attachment"
-  const payload: Record<string, unknown> = {};
+  // MAX contact attachment payload uses snake_case (contact_id / vcf_info /
+  // vcf_phone) and requires `name`. Requires either contact_id (MAX user_id)
+  // or vcf_info (VCard string); without either → 400 "Missing info for contact".
+  const payload: Record<string, unknown> = { name: contact.name };
   if (contact.contactId != null) {
-    payload.contactId = contact.contactId;
-    if (contact.vcfPhone) payload.vcfPhone = contact.vcfPhone;
+    payload.contact_id = contact.contactId;
+    if (contact.vcfPhone) payload.vcf_phone = contact.vcfPhone;
   } else if (contact.vcfInfo) {
-    payload.vcfInfo = contact.vcfInfo;
+    payload.vcf_info = contact.vcfInfo;
   } else {
     // Generate VCard from name + phone
     // Use literal \n escape sequence for JSON serialization
     const vcfParts = ['BEGIN:VCARD', 'VERSION:3.0', `FN:${contact.name}`];
     if (contact.vcfPhone) vcfParts.push(`TEL:${contact.vcfPhone}`);
     vcfParts.push('END:VCARD');
-    payload.vcfInfo = vcfParts.join('\n');
+    payload.vcf_info = vcfParts.join('\n');
   }
 
   const attachment: MaxAttachment = {
