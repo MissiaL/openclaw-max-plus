@@ -12,10 +12,15 @@
  * - Security warnings for group policy
  */
 
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import type { OpenClawConfig } from 'openclaw/plugin-sdk';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { maxPlugin } from './channel.js';
+import { __resetChatRegistryForTest, upsertChat } from './chat-registry.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const plugin = maxPlugin as any;
@@ -463,54 +468,56 @@ describe('MAX Group Functionality', () => {
   });
 
   describe('directory.listGroups', () => {
+    // listGroups now reads the local event-driven registry (GET /chats is
+    // deprecated). Isolate the registry to a temp state dir per test.
+    let tempRoot: string;
+    let prevStateDir: string | undefined;
+
+    beforeEach(() => {
+      tempRoot = mkdtempSync(join(tmpdir(), 'max-groups-'));
+      prevStateDir = process.env.OPENCLAW_STATE_DIR;
+      process.env.OPENCLAW_STATE_DIR = tempRoot;
+      __resetChatRegistryForTest();
+    });
+
+    afterEach(() => {
+      __resetChatRegistryForTest();
+      if (prevStateDir == null) delete process.env.OPENCLAW_STATE_DIR;
+      else process.env.OPENCLAW_STATE_DIR = prevStateDir;
+      rmSync(tempRoot, { recursive: true, force: true });
+    });
+
     it('should be a function', () => {
       expect(typeof plugin.directory!.listGroups).toBe('function');
     });
 
-    it('should return empty array when no token', async () => {
-      const cfg = makeConfig({ botToken: '' });
+    it('should return empty array when the registry is empty', async () => {
+      const cfg = makeConfig({ botToken: 'test-token' });
       const result = await plugin.directory!.listGroups({ cfg, accountId: undefined });
       expect(result).toEqual([]);
     });
 
-    it('should return groups from API', async () => {
-      const mockChats = {
-        chats: [
-          { chat_id: 100, type: 'chat', title: 'Test Group', status: 'active' },
-          { chat_id: 200, type: 'channel', title: 'Test Channel', status: 'active' },
-          { chat_id: 300, type: 'dialog', title: null, status: 'active' },
-        ],
-        marker: null,
-      };
+    it('should return groups and channels from the registry, no network call', async () => {
+      // A network call here would be a regression — fail loudly if listGroups fetches.
+      global.fetch = vi.fn().mockRejectedValue(new Error('listGroups must not hit the network'));
 
-      global.fetch = vi.fn().mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockChats,
-      });
+      upsertChat('default', { chatId: 100, kind: 'group', title: 'Test Group', seenAt: 1 });
+      upsertChat('default', { chatId: 200, kind: 'channel', title: 'Test Channel', seenAt: 1 });
 
       const cfg = makeConfig({ botToken: 'test-token' });
       const result = await plugin.directory!.listGroups({ cfg, accountId: undefined });
 
-      // Should filter out dialogs
-      expect(result).toHaveLength(2);
-      expect(result[0]).toEqual({
-        kind: 'group',
-        id: '100',
-        name: 'Test Group',
-      });
-      expect(result[1]).toEqual({
-        kind: 'channel',
-        id: '200',
-        name: 'Test Channel',
-      });
+      const byId = Object.fromEntries(result.map((e: { id: string }) => [e.id, e]));
+      expect(byId['100']).toEqual({ kind: 'group', id: '100', name: 'Test Group' });
+      expect(byId['200']).toEqual({ kind: 'channel', id: '200', name: 'Test Channel' });
+      expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    it('should return empty array on API error', async () => {
-      global.fetch = vi.fn().mockRejectedValueOnce(new Error('Network error'));
-
+    it('omits name for a chat without a title', async () => {
+      upsertChat('default', { chatId: 300, kind: 'group', seenAt: 1 });
       const cfg = makeConfig({ botToken: 'test-token' });
       const result = await plugin.directory!.listGroups({ cfg, accountId: undefined });
-      expect(result).toEqual([]);
+      expect(result).toEqual([{ kind: 'group', id: '300', name: undefined }]);
     });
   });
 
