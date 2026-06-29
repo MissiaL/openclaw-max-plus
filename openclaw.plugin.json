@@ -1,5 +1,5 @@
 {
-  "id": "openclaw-max",
+  "id": "openclaw-max-plus",
   "name": "MAX",
   "description": "MAX messenger channel plugin (max.ru Bot API, long polling)",
   "version": "0.5.0",

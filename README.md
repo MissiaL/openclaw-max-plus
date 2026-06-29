@@ -1,4 +1,4 @@
-# openclaw-max – плагин MAX для OpenClaw
+# openclaw-max-plus – плагин MAX для OpenClaw
 
 Канал-плагин для подключения AI-ассистента [OpenClaw](https://openclaw.ai) к мессенджеру [MAX](https://max.ru) (max.ru Bot API).
 
@@ -21,7 +21,7 @@
 ## Структура проекта
 
 ```
-openclaw-max/
+openclaw-max-plus/
 ├── openclaw.plugin.json    # Манифест плагина
 ├── package.json
 ├── tsconfig.json
@@ -58,7 +58,7 @@ openclaw-max/
 
 **1. Собрать плагин** (entry — `dist/index.js`; build кладёт и `dist/certs/` с CA):
 ```bash
-cd /путь/к/openclaw-max
+cd /путь/к/openclaw-max-plus
 npm install
 npm run typecheck && npm run lint && npm test   # должно быть зелёным
 npm run build
@@ -66,12 +66,12 @@ npm run build
 
 **2. Подключить плагин к OpenClaw.** Способ А — через CLI:
 ```bash
-openclaw plugins install --link /путь/к/openclaw-max   # симлинк (live-разработка)
+openclaw plugins install --link /путь/к/openclaw-max-plus   # симлинк (live-разработка)
 ```
 Способ Б — прописать путь в `~/.openclaw/openclaw.json` (gateway грузит из рабочей папки):
 ```jsonc
-{ "plugins": { "entries": { "openclaw-max": { "enabled": true } },
-               "load": { "paths": ["/путь/к/openclaw-max"] } } }
+{ "plugins": { "entries": { "openclaw-max-plus": { "enabled": true } },
+               "load": { "paths": ["/путь/к/openclaw-max-plus"] } } }
 ```
 
 **3. Настроить канал** в `~/.openclaw/openclaw.json` (минимум — токен + кто может писать):
@@ -125,7 +125,7 @@ tail -f ~/Library/Logs/openclaw/gateway.log   # macOS launchd
 ### 2. Собрать и подключить плагин
 
 ```bash
-cd openclaw-max
+cd openclaw-max-plus
 npm install
 npm run build                          # собирает dist/ (entry: dist/index.js)
 
@@ -139,8 +139,8 @@ openclaw plugins install ./.           # или абсолютный путь к
 ```jsonc
 {
   "plugins": {
-    "entries": { "openclaw-max": { "enabled": true } },
-    "load": { "paths": ["/путь/к/openclaw-max"] }
+    "entries": { "openclaw-max-plus": { "enabled": true } },
+    "load": { "paths": ["/путь/к/openclaw-max-plus"] }
   }
 }
 ```

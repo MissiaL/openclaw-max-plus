@@ -1,16 +1,16 @@
 {
-  "name": "openclaw-max",
+  "name": "openclaw-max-plus",
   "version": "0.5.0",
   "description": "MAX messenger channel plugin for OpenClaw",
   "type": "module",
   "main": "./dist/index.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/aspalagin/openclaw-max.git"
+    "url": "git+https://github.com/MissiaL/openclaw-max-plus.git"
   },
-  "homepage": "https://github.com/aspalagin/openclaw-max#readme",
+  "homepage": "https://github.com/MissiaL/openclaw-max-plus#readme",
   "bugs": {
-    "url": "https://github.com/aspalagin/openclaw-max/issues"
+    "url": "https://github.com/MissiaL/openclaw-max-plus/issues"
   },
   "scripts": {
     "build": "rm -rf dist-ts dist/src && tsc --noEmit false --noEmitOnError false --outDir dist-ts && mkdir -p dist/src && cp dist-ts/index.js dist/index.js && cp dist-ts/src/*.js dist/src/ && cp -R certs dist/certs",

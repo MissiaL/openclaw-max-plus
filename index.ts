@@ -16,7 +16,7 @@ import { setMaxRuntime } from './src/runtime.js';
 import { handleMaxWebhookRequest, resolveMaxWebhookPaths } from './src/webhook.js';
 
 const plugin = {
-  id: 'openclaw-max',
+  id: 'openclaw-max-plus',
   name: 'MAX',
   description: 'MAX messenger channel plugin (max.ru Bot API)',
   configSchema: {
