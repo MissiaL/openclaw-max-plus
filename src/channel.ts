@@ -35,7 +35,13 @@ import {
 import { startMaxPolling } from './monitor.js';
 import { maxSetupWizard } from './onboarding.js';
 import { getMaxRuntime } from './runtime.js';
-import { readMaxChannelButtons, sendMaxMediaMessage, sendMaxMessage } from './send.js';
+import {
+  getMaxMembership,
+  pinMaxMessage,
+  readMaxChannelButtons,
+  sendMaxMediaMessage,
+  sendMaxMessage,
+} from './send.js';
 
 // ── MAX group policy helpers ──
 // These mirror resolveChannelGroupRequireMention/resolveChannelGroupToolsPolicy
@@ -138,7 +144,7 @@ const maxMeta: ChannelMeta = {
   label: 'MAX',
   selectionLabel: 'MAX Messenger',
   docsPath: '/channels/max',
-  blurb: 'MAX messenger bot via platform-api.max.ru. Supports DMs, groups, inline keyboards.',
+  blurb: 'MAX messenger bot via platform-api2.max.ru. Supports DMs, groups, inline keyboards.',
   order: 50,
   aliases: ['max-messenger'],
 };
@@ -344,7 +350,11 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount> = {
       const account = resolveMaxAccount({ cfg, accountId });
       if (!account.token) return null;
       try {
-        const api = new MaxApi({ token: account.token, timeoutMs: 3000 });
+        const api = new MaxApi({
+          token: account.token,
+          baseUrl: account.config.apiBaseUrl,
+          timeoutMs: 3000,
+        });
         const me = await api.getMe();
         return {
           kind: 'user' as const,
@@ -467,6 +477,23 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount> = {
         messageId: result.messageId,
       };
     },
+
+    // Pin a delivered message. MAX requires the bot to be an admin and only
+    // supports pinning in group chats / channels (not 1:1 dialogs).
+    pinDeliveredMessage: async ({ cfg, target, messageId, pin }) => {
+      const account = resolveMaxAccount({ cfg, accountId: target.accountId ?? undefined });
+      if (!account.token) throw new Error('MAX bot token not configured');
+      const sendOpts = { token: account.token, baseUrl: account.config.apiBaseUrl };
+      // Preflight: MAX only lets admins pin, and only in group chats / channels.
+      // Surface a clear error instead of a raw 403/404 from the pin call.
+      const membership = await getMaxMembership(target.to, sendOpts);
+      if (!membership.isAdmin) {
+        throw new Error(
+          'Cannot pin in MAX: the bot must be an admin of this chat (group/channel only).',
+        );
+      }
+      await pinMaxMessage(target.to, messageId, { ...sendOpts, notify: pin.notify });
+    },
   },
 
   setup: {
@@ -566,7 +593,11 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount> = {
 
     probeAccount: async ({ account, timeoutMs }) => {
       if (!account.token) return { ok: false, error: 'no token' };
-      const api = new MaxApi({ token: account.token, timeoutMs });
+      const api = new MaxApi({
+        token: account.token,
+        baseUrl: account.config.apiBaseUrl,
+        timeoutMs,
+      });
       try {
         const me = await api.getMe();
         return { ok: true, bot: me };
@@ -615,7 +646,11 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount> = {
         };
       }
 
-      const api = new MaxApi({ token: account.token, timeoutMs });
+      const api = new MaxApi({
+        token: account.token,
+        baseUrl: account.config.apiBaseUrl,
+        timeoutMs,
+      });
       const results: Array<{
         id: string;
         ok: boolean;
@@ -695,7 +730,11 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount> = {
       let botUserId: number | undefined;
       let botUsername: string | undefined;
       try {
-        const probeApi = new MaxApi({ token, timeoutMs: 3000 });
+        const probeApi = new MaxApi({
+          token,
+          baseUrl: account.config.apiBaseUrl,
+          timeoutMs: 3000,
+        });
         const me = await probeApi.getMe();
         if (me.username) {
           botLabel = ` (@${me.username})`;
@@ -708,7 +747,7 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount> = {
 
       ctx.log?.info(`[${account.accountId}] Starting MAX provider${botLabel}`);
 
-      const api = new MaxApi({ token });
+      const api = new MaxApi({ token, baseUrl: account.config.apiBaseUrl });
 
       // Register bot commands if configured
       const commands = ctx.cfg.channels?.max?.commands as

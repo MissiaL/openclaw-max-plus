@@ -37,6 +37,61 @@ describe('MaxApi', () => {
     });
   });
 
+  describe('baseUrl resolution', () => {
+    const ENV_KEY = 'MAX_API_BASE_URL';
+    let savedEnv: string | undefined;
+
+    beforeEach(() => {
+      savedEnv = process.env[ENV_KEY];
+      delete process.env[ENV_KEY];
+    });
+
+    afterEach(() => {
+      if (savedEnv === undefined) delete process.env[ENV_KEY];
+      else process.env[ENV_KEY] = savedEnv;
+    });
+
+    it('should default to the migrated platform-api2 domain', async () => {
+      // The bundled Минцифры root CA is auto-trusted (see ca-trust.ts), so the
+      // platform-api2 domain works out of the box without a system cert install.
+      const defaultApi = new MaxApi({ token: MOCK_TOKEN });
+      global.fetch = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+      await defaultApi.getMe();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('https://platform-api2.max.ru'),
+        expect.anything(),
+      );
+    });
+
+    it('should honor MAX_API_BASE_URL env override when no explicit baseUrl', async () => {
+      process.env[ENV_KEY] = 'https://env-api.max.ru';
+      const envApi = new MaxApi({ token: MOCK_TOKEN });
+      global.fetch = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+      await envApi.getMe();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('https://env-api.max.ru'),
+        expect.anything(),
+      );
+    });
+
+    it('should let explicit baseUrl win over the env override', async () => {
+      process.env[ENV_KEY] = 'https://env-api.max.ru';
+      const explicitApi = new MaxApi({ token: MOCK_TOKEN, baseUrl: 'https://explicit.max.ru' });
+      global.fetch = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+      await explicitApi.getMe();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('https://explicit.max.ru'),
+        expect.anything(),
+      );
+    });
+  });
+
   describe('getMe', () => {
     it('should fetch bot info', async () => {
       const mockUser = {
@@ -178,6 +233,97 @@ describe('MaxApi', () => {
 
       const result = await api.getChats({ count: 10 });
       expect(result.chats).toHaveLength(2);
+    });
+  });
+
+  describe('getMessages', () => {
+    function mockOk() {
+      global.fetch = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ messages: [] }) });
+    }
+
+    it('should clamp count above 100 down to 100', async () => {
+      mockOk();
+      await api.getMessages(123, { count: 500 });
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('count=100'),
+        expect.anything(),
+      );
+    });
+
+    it('should clamp count below 1 up to 1', async () => {
+      mockOk();
+      await api.getMessages(123, { count: 0 });
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('count=1'),
+        expect.anything(),
+      );
+    });
+
+    it('should pass an in-range count unchanged', async () => {
+      mockOk();
+      await api.getMessages(123, { count: 50 });
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('count=50'),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('getMyMembership', () => {
+    it('should GET /chats/{id}/members/me', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ user_id: 1, is_admin: true, permissions: ['pin_message'] }),
+      });
+
+      const member = await api.getMyMembership(123);
+
+      const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(String(url)).toContain('/chats/123/members/me');
+      expect(init.method).toBe('GET');
+      expect(member.is_admin).toBe(true);
+    });
+  });
+
+  describe('pin', () => {
+    it('should pin a message via PUT /chats/{id}/pin', async () => {
+      global.fetch = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true }) });
+
+      await api.pinMessage(123, 'mid-1', { notify: false });
+
+      const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(String(url)).toContain('/chats/123/pin');
+      expect(init.method).toBe('PUT');
+      expect(String(init.body)).toContain('"message_id":"mid-1"');
+      expect(String(init.body)).toContain('"notify":false');
+    });
+
+    it('should unpin via DELETE /chats/{id}/pin', async () => {
+      global.fetch = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true }) });
+
+      await api.unpinMessage(123);
+
+      const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(String(url)).toContain('/chats/123/pin');
+      expect(init.method).toBe('DELETE');
+    });
+
+    it('should fetch the pinned message via GET /chats/{id}/pin', async () => {
+      global.fetch = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ message: null }) });
+
+      await api.getPinnedMessage(123);
+
+      const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(String(url)).toContain('/chats/123/pin');
+      expect(init.method).toBe('GET');
     });
   });
 

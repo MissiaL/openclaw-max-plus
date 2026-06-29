@@ -97,7 +97,7 @@ export const maxSetupWizard: ChannelSetupWizard = {
   introNote: {
     title: 'MAX setup',
     lines: [
-      'MAX messenger bot requires a bot token from https://platform-api.max.ru',
+      'MAX messenger bot requires a bot token from @MasterBot in MAX (API: https://platform-api2.max.ru).',
       'Create your bot via MAX Business or MAX API portal.',
       'The bot can receive messages via polling (default) or webhook.',
       `Docs: ${formatDocsLink('/channels/max', 'channels/max')}`,

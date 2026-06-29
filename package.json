@@ -13,7 +13,7 @@
     "url": "https://github.com/aspalagin/openclaw-max/issues"
   },
   "scripts": {
-    "build": "rm -rf dist-ts dist/src && tsc --noEmit false --noEmitOnError false --outDir dist-ts && mkdir -p dist/src && cp dist-ts/index.js dist/index.js && cp dist-ts/src/*.js dist/src/",
+    "build": "rm -rf dist-ts dist/src && tsc --noEmit false --noEmitOnError false --outDir dist-ts && mkdir -p dist/src && cp dist-ts/index.js dist/index.js && cp dist-ts/src/*.js dist/src/ && cp -R certs dist/certs",
     "prepack": "npm run build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
@@ -28,6 +28,7 @@
     "dist/",
     "src/",
     "scripts/",
+    "certs/",
     "openclaw.plugin.json",
     "README.md",
     "SKILL.md",

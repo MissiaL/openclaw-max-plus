@@ -6,14 +6,17 @@
 
 Плагин позволяет общаться с OpenClaw-ботом через мессенджер MAX — так же, как через Telegram. Поддерживает:
 
-- Приём и отправку текстовых сообщений
-- Вложения (фото, видео, аудио, файлы)
-- Inline-кнопки (callback / link) и выбор модели
-- Форматирование (markdown / HTML)
-- Стриминг ответа (`streamMode`: partial / block)
-- Long polling и Webhook
-- Мультиаккаунт
-- DM-security, pairing, групповые политики
+- Приём и отправку текстовых сообщений (markdown)
+- Вложения: фото, видео, файлы, стикеры, контакт, локация (в т.ч. inline-base64 — напр. сгенерированные картинки)
+- Длинные подписи к медиа (>4000 — остаток уходит follow-up-сообщениями)
+- Inline-кнопки: `callback` (+цвет intent), `link`, `request_contact`, `request_geo_location`, `message`, `clipboard`, `open_app`; выбор модели
+- Reply, **forward** (приём с атрибуцией автора/канала), edit, delete
+- **Pin/unpin** сообщений (admin-only, группы/каналы)
+- Стриминг ответа (`streamMode`: partial / block), typing-индикатор
+- Long polling и Webhook (с валидацией secret/url)
+- Мультиаккаунт, DM-security, pairing, групповые политики
+
+> Реакции и опросы MAX Bot API **не поддерживает** (платформенное ограничение). Нативные голосовые заметки MAX боту не доставляет (баг платформы).
 
 ## Структура проекта
 
@@ -43,6 +46,71 @@ openclaw-max/
     ├── test-api.mjs        # Проверка токена и API (GET /me + GET /updates)
     └── test-send.mjs       # Тест send + edit + delete
 ```
+
+## 🤖 Инструкция для агента: как настроить OpenClaw с этим плагином
+
+Пошаговый runbook (выполнять по порядку, проверяя результат каждого шага).
+
+**0. Предусловия**
+- Node.js **≥ 22.15** (нужен `tls.setDefaultCACertificates` для авто-доверия CA Минцифры → домен `platform-api2.max.ru`). Проверка: `node -e "const t=require('node:tls');console.log(typeof t.setDefaultCACertificates)"` → должно быть `function`.
+- Установлен `openclaw` (CLI/gateway). Проверка: `openclaw --version`.
+- Есть токен бота MAX (см. «Установка → Создать бота в MAX» ниже). Никогда не печатать токен в логи/коммиты.
+
+**1. Собрать плагин** (entry — `dist/index.js`; build кладёт и `dist/certs/` с CA):
+```bash
+cd /путь/к/openclaw-max
+npm install
+npm run typecheck && npm run lint && npm test   # должно быть зелёным
+npm run build
+```
+
+**2. Подключить плагин к OpenClaw.** Способ А — через CLI:
+```bash
+openclaw plugins install --link /путь/к/openclaw-max   # симлинк (live-разработка)
+```
+Способ Б — прописать путь в `~/.openclaw/openclaw.json` (gateway грузит из рабочей папки):
+```jsonc
+{ "plugins": { "entries": { "openclaw-max": { "enabled": true } },
+               "load": { "paths": ["/путь/к/openclaw-max"] } } }
+```
+
+**3. Настроить канал** в `~/.openclaw/openclaw.json` (минимум — токен + кто может писать):
+```jsonc
+{ "channels": { "max": {
+  "enabled": true,
+  "botToken": "ТОКЕН_БОТА",       // или "tokenFile": "/path/to/token", или env MAX_BOT_TOKEN
+  "dmPolicy": "allowlist",         // pairing | allowlist | open
+  "allowFrom": ["ВАШ_USER_ID"],    // см. шаг 6, как узнать user_id
+  "streamMode": "partial"
+  // "apiBaseUrl": "https://platform-api.max.ru"  // ОПЦ.: откат на legacy-домен (если Node < 22.15)
+}}}
+```
+> Держать `src/config-schema.ts` ↔ `openclaw.plugin.json` в синхроне при добавлении полей.
+
+**4. (Опц.) Индикатор «печатает…»** — для непрерывности задать глобально:
+```bash
+openclaw config set session.typingIntervalSeconds 4
+```
+
+**5. Перезапустить gateway** — зависит от того, как он запущен:
+- launchd-сервис (`launchctl list | grep openclaw` показывает `ai.openclaw.gateway`): `launchctl kickstart -k "gui/$(id -u)/ai.openclaw.gateway"`
+- вручную: остановить и `openclaw gateway --port 18789` (или `openclaw gateway restart`, если поддерживается).
+> **После ЛЮБОЙ правки кода:** `npm run build` → перезапуск gateway (плагин держится в памяти, на лету не подхватывается).
+
+**6. Проверить и найти свой user_id:**
+```bash
+openclaw plugins inspect max --runtime        # канал max зарегистрирован?
+# Живой лог gateway (stdout). Путь зависит от запуска:
+tail -f ~/Library/Logs/openclaw/gateway.log   # macOS launchd
+# Написать боту в MAX любой текст → в логе появится "Starting MAX provider (@bot)" и обработка;
+# user_id отправителя виден в логах или: MAX_BOT_TOKEN=xxx node scripts/test-api.mjs (раздел updates)
+```
+Подставить найденный `user_id` в `allowFrom` (шаг 3) и перезапустить gateway. Бот должен ответить.
+
+**7. Диагностика «бот не отвечает»** (по приоритету):
+1. `getUpdates`/TLS падает → проверь домен: `curl -I -H "Authorization: ТОКЕН" https://platform-api2.max.ru/me` (200/401 = TLS ок; `TLS:20`/`UNABLE_TO_GET_ISSUER` = нет CA → Node < 22.15 или `npm run build` не клал `certs/` → временно `apiBaseUrl: "https://platform-api.max.ru"`).
+2. Сообщение приходит, но ответа нет → смотри `~/.openclaw/agents/main/sessions/*.jsonl` (последние записи): дошёл ли inbound, не упал ли `toolResult` отправки (напр. `POST /messages → 404` = неверный chat_id; `ENAMETOOLONG` = inline-медиа; LLM-биллинг = квота).
+3. `dmPolicy`/`allowFrom` блокируют отправителя → проверь user_id в `allowFrom`.
 
 ## Установка
 
@@ -159,8 +227,8 @@ MAX: `GET /me` вернёт массив `commands`.
 
 > Регистрация **меню** команд и их **обработка** — разные вещи. `name` команд —
 > это встроенные slash-команды OpenClaw (`/status`, `/new`, `/stop`, …), которые
-> обрабатывает ядро. На момент написания доставка ответов на команды через
-> MAX-канal в отладке (см. CLAUDE.md).
+> обрабатывает ядро. Доставка ответов на команды через MAX-канал работает
+> (проверено живьём).
 
 ## Настройка — основные поля канала
 
@@ -288,7 +356,7 @@ MAX_BOT_TOKEN=xxx node scripts/test-send.mjs <chat_id> "Текст сообще�
 - Документация: [dev.max.ru/docs-api](https://dev.max.ru/docs-api)
 - ⚠️ `GET /chats` (список чатов) помечен устаревшим с июня 2026; одиночный `GET /chats/{chatId}` работает.
 - ⚠️ Команды бота задаются через `PATCH /me` (поле `commands`); отдельного `POST /me/commands` в API нет.
-- ⚠️ **Миграция домена:** до **19.07.2026** перенести запросы с `platform-api.max.ru` на `platform-api2.max.ru` (+ сертификат Минцифры). В коде хост пока зашит — см. CLAUDE.md.
+- ✅ **Домен:** по умолчанию `platform-api2.max.ru` (legacy `platform-api.max.ru` отключается 19.07.2026). Этот домен подписан корневым CA Минцифры — плагin **бандлит CA и авто-доверяет ему в рамках процесса** (`certs/`, `src/ca-trust.ts`), **без установки сертификата в систему**. Требует Node ≥ 22.15. Откат/override: `apiBaseUrl` в конфиге канала или env `MAX_API_BASE_URL`.
 
 ## Лицензия
 

@@ -23,6 +23,10 @@
           "botToken": {
             "type": "string"
           },
+          "apiBaseUrl": {
+            "type": "string",
+            "format": "uri"
+          },
           "dmPolicy": {
             "type": "string",
             "enum": [
@@ -47,10 +51,12 @@
             }
           },
           "webhookUrl": {
-            "type": "string"
+            "type": "string",
+            "format": "uri"
           },
           "webhookSecret": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{5,256}$"
           },
           "webhookPath": {
             "type": "string"
@@ -72,6 +78,10 @@
                 },
                 "botToken": {
                   "type": "string"
+                },
+                "apiBaseUrl": {
+                  "type": "string",
+                  "format": "uri"
                 },
                 "dmPolicy": {
                   "type": "string",
@@ -96,10 +106,12 @@
                   }
                 },
                 "webhookUrl": {
-                  "type": "string"
+                  "type": "string",
+                  "format": "uri"
                 },
                 "webhookSecret": {
-                  "type": "string"
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9_-]{5,256}$"
                 },
                 "webhookPath": {
                   "type": "string"

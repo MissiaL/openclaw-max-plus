@@ -26,6 +26,16 @@ const DmConfigSchema = z
   })
   .strict();
 
+/** MAX webhooks must be HTTPS on port 443 (implicit or explicit). */
+function isHttps443(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    return u.protocol === 'https:' && (u.port === '' || u.port === '443');
+  } catch {
+    return false;
+  }
+}
+
 function requireOpenAllowFrom(params: {
   policy: string | undefined;
   allowFrom: unknown[] | undefined;
@@ -67,13 +77,29 @@ export const MaxAccountSchemaBase = z
     markdown: MarkdownConfigSchema.optional(),
     botToken: z.string().optional(),
     tokenFile: z.string().optional(),
+    // Override the MAX Bot API base URL. Defaults to https://platform-api2.max.ru.
+    // Also overridable globally via the MAX_API_BASE_URL env var.
+    apiBaseUrl: z.string().url().optional(),
     dmPolicy: DmPolicySchema.optional().default('pairing'),
     allowFrom: z.array(z.union([z.string(), z.number()])).optional(),
     groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
     groupPolicy: GroupPolicySchema.optional().default('allowlist'),
     groups: z.record(z.string(), MaxGroupSchema.optional()).optional(),
-    webhookUrl: z.string().optional(),
-    webhookSecret: z.string().optional(),
+    // MAX requires webhooks over HTTPS on port 443 (self-signed/HTTP dropped 2026-05-25).
+    webhookUrl: z
+      .string()
+      .url()
+      .refine((u) => isHttps443(u), {
+        message: 'channels.max.webhookUrl must be an https:// URL on port 443',
+      })
+      .optional(),
+    // MAX webhook secret: 5–256 chars of [A-Za-z0-9_-].
+    webhookSecret: z
+      .string()
+      .regex(/^[a-zA-Z0-9_-]{5,256}$/, {
+        message: 'channels.max.webhookSecret must be 5–256 characters of [A-Za-z0-9_-]',
+      })
+      .optional(),
     webhookPath: z.string().optional(),
     historyLimit: z.number().int().min(0).optional(),
     dmHistoryLimit: z.number().int().min(0).optional(),

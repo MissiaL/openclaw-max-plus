@@ -54,6 +54,48 @@ describe('MAX Config Schema', () => {
       expect(result).toMatchObject(valid);
     });
 
+    it('should accept apiBaseUrl override', () => {
+      const config = { botToken: 'token', apiBaseUrl: 'https://platform-api2.max.ru' };
+      const result = MaxAccountSchema.parse(config);
+      expect(result.apiBaseUrl).toBe('https://platform-api2.max.ru');
+    });
+
+    it('should reject a non-URL apiBaseUrl', () => {
+      const config = { botToken: 'token', apiBaseUrl: 'not-a-url' };
+      expect(() => MaxAccountSchema.parse(config)).toThrow();
+    });
+
+    it('should accept a valid https:443 webhookUrl and secret', () => {
+      const config = {
+        botToken: 'token',
+        webhookUrl: 'https://example.com/max',
+        webhookSecret: 'valid_secret-123',
+      };
+      const result = MaxAccountSchema.parse(config);
+      expect(result.webhookUrl).toBe('https://example.com/max');
+      expect(result.webhookSecret).toBe('valid_secret-123');
+    });
+
+    it('should reject a non-https webhookUrl', () => {
+      const config = { botToken: 'token', webhookUrl: 'http://example.com/max' };
+      expect(() => MaxAccountSchema.parse(config)).toThrow();
+    });
+
+    it('should reject a webhookUrl on a non-443 port', () => {
+      const config = { botToken: 'token', webhookUrl: 'https://example.com:8443/max' };
+      expect(() => MaxAccountSchema.parse(config)).toThrow();
+    });
+
+    it('should reject a too-short webhookSecret', () => {
+      const config = { botToken: 'token', webhookSecret: 'abc' };
+      expect(() => MaxAccountSchema.parse(config)).toThrow();
+    });
+
+    it('should reject a webhookSecret with invalid characters', () => {
+      const config = { botToken: 'token', webhookSecret: 'has spaces!' };
+      expect(() => MaxAccountSchema.parse(config)).toThrow();
+    });
+
     it('should accept tokenFile instead of botToken', () => {
       const config = {
         enabled: true,

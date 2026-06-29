@@ -41,6 +41,26 @@ describe('MAX Message Actions', () => {
       expect(result?.actions).toContain('delete');
     });
 
+    it('should only declare valid host message capabilities (no phantom "buttons")', () => {
+      const cfg: OpenClawConfig = {
+        channels: { max: { enabled: true, botToken: 'test-token' } },
+      };
+      const result = actions.describeMessageTool({ cfg });
+      expect(result?.capabilities).not.toContain('buttons');
+      const valid = ['presentation', 'delivery-pin'];
+      for (const cap of result?.capabilities ?? []) {
+        expect(valid).toContain(cap);
+      }
+    });
+
+    it('should declare the delivery-pin capability', () => {
+      const cfg: OpenClawConfig = {
+        channels: { max: { enabled: true, botToken: 'test-token' } },
+      };
+      const result = actions.describeMessageTool({ cfg });
+      expect(result?.capabilities).toContain('delivery-pin');
+    });
+
     it('should return null for disabled accounts', () => {
       const cfg: OpenClawConfig = {
         channels: {

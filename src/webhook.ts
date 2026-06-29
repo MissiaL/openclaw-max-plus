@@ -12,6 +12,7 @@ import { requestBodyErrorToText } from 'openclaw/plugin-sdk/webhook-ingress';
 import type { ResolvedMaxAccount } from './accounts.js';
 import type { MaxUpdate } from './api.js';
 import type { MaxApi } from './api.js';
+import { MAX_SUBSCRIBED_UPDATE_TYPES } from './types.js';
 
 export type MaxWebhookTarget = {
   account: ResolvedMaxAccount;
@@ -195,16 +196,7 @@ export async function subscribeMaxWebhook(params: {
 
   await api.subscribe({
     url: webhookUrl,
-    update_types: updateTypes ?? [
-      'message_created',
-      'message_callback',
-      'message_edited',
-      'message_removed',
-      'bot_started',
-      'bot_added',
-      'bot_removed',
-      'chat_title_changed',
-    ],
+    update_types: updateTypes ?? [...MAX_SUBSCRIBED_UPDATE_TYPES],
     secret,
   });
 }

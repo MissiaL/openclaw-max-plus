@@ -12,6 +12,7 @@ import { getMaxRuntime } from './runtime.js';
 import {
   deleteMaxMessage,
   editMaxMessage,
+  readMaxChannelButtons,
   sendMaxContact,
   sendMaxLocation,
   sendMaxMediaMessage,
@@ -66,7 +67,11 @@ export const maxMessageActions: ChannelMessageActionAdapter = {
     }
     return {
       actions: ['send', 'edit', 'delete', 'sticker', 'sendAttachment'],
-      capabilities: ['buttons'] as unknown as readonly ('presentation' | 'delivery-pin')[],
+      // Host message-capability union is ('presentation' | 'delivery-pin')[].
+      // Inline buttons are delivered via channelData passthrough (see
+      // readMaxChannelButtons), which needs no capability flag. 'delivery-pin'
+      // is wired in outbound.pinDeliveredMessage (channel.ts).
+      capabilities: ['delivery-pin'],
     };
   },
 
@@ -119,23 +124,14 @@ export const maxMessageActions: ChannelMessageActionAdapter = {
         allowEmpty: true,
       });
       const replyTo = readStringParam(params, 'replyTo');
+      const forwardId =
+        readStringParam(params, 'forwardId') ?? readStringParam(params, 'forwardMessageId');
       const stickerId = readStringParam(params, 'stickerId');
 
-      // Parse inline keyboard buttons: [[{text, callback_data?, url?}]]
-      let buttons: Array<Array<{ text: string; payload?: string; url?: string }>> | undefined;
-      if (params.buttons && Array.isArray(params.buttons)) {
-        buttons = (params.buttons as Array<Array<Record<string, unknown>>>).map((row) =>
-          (Array.isArray(row) ? row : [row]).map((btn) => ({
-            text: String(btn.text ?? btn.label ?? ''),
-            payload: btn.callback_data
-              ? String(btn.callback_data)
-              : btn.payload
-                ? String(btn.payload)
-                : undefined,
-            url: btn.url ? String(btn.url) : undefined,
-          })),
-        );
-      }
+      // Parse inline keyboard buttons via the shared reader so every button type
+      // (callback+intent, link, request_contact/geo, open_app, message, clipboard)
+      // is supported. The reader expects a channelData-shaped { max: { buttons } }.
+      const buttons = readMaxChannelButtons({ max: { buttons: params.buttons } });
 
       // Sticker sending (by sticker code)
       if (stickerId) {
@@ -257,6 +253,7 @@ export const maxMessageActions: ChannelMessageActionAdapter = {
       const result = await sendMaxMessage(to, content, {
         token: account.token,
         replyToMessageId: replyTo ?? undefined,
+        forwardMessageId: forwardId ?? undefined,
         format: 'markdown',
         buttons,
       });

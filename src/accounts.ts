@@ -23,6 +23,7 @@ export interface MaxAccountConfig {
   enabled?: boolean;
   botToken?: string;
   tokenFile?: string;
+  apiBaseUrl?: string;
   name?: string;
   dmPolicy?: string;
   allowFrom?: Array<string | number>;
@@ -112,6 +113,7 @@ export function resolveMaxAccount(params: {
       enabled: section.enabled !== false,
       botToken: section.botToken as string | undefined,
       tokenFile: section.tokenFile as string | undefined,
+      apiBaseUrl: section.apiBaseUrl as string | undefined,
       name: section.name as string | undefined,
       dmPolicy: section.dmPolicy as string | undefined,
       allowFrom: section.allowFrom as Array<string | number> | undefined,
@@ -145,6 +147,7 @@ export function resolveMaxAccount(params: {
       enabled: raw.enabled !== false,
       botToken: raw.botToken as string | undefined,
       tokenFile: raw.tokenFile as string | undefined,
+      apiBaseUrl: raw.apiBaseUrl as string | undefined,
       name: raw.name as string | undefined,
       dmPolicy: raw.dmPolicy as string | undefined,
       allowFrom: raw.allowFrom as Array<string | number> | undefined,

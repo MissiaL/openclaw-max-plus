@@ -199,6 +199,33 @@ describe('MAX Account Resolution', () => {
       expect(account.config.webhookSecret).toBe('secret123');
     });
 
+    it('should resolve apiBaseUrl from config for the default account', () => {
+      const cfg: OpenClawConfig = {
+        channels: {
+          max: {
+            botToken: 'token',
+            apiBaseUrl: 'https://platform-api2.max.ru',
+          },
+        },
+      };
+      const account = resolveMaxAccount({ cfg });
+      expect(account.config.apiBaseUrl).toBe('https://platform-api2.max.ru');
+    });
+
+    it('should resolve apiBaseUrl from config for a named account', () => {
+      const cfg: OpenClawConfig = {
+        channels: {
+          max: {
+            accounts: {
+              prod: { botToken: 'token', apiBaseUrl: 'https://custom.example.ru' },
+            },
+          },
+        },
+      };
+      const account = resolveMaxAccount({ cfg, accountId: 'prod' });
+      expect(account.config.apiBaseUrl).toBe('https://custom.example.ru');
+    });
+
     it('should default enabled to true', () => {
       const cfg: OpenClawConfig = {
         channels: { max: { botToken: 'token' } },

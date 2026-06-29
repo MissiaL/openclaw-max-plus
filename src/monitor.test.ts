@@ -129,6 +129,118 @@ describe('MAX Monitor', () => {
       const ctx = finalizeInboundContext.mock.calls[0][0] as { CommandTurn?: unknown };
       expect(ctx.CommandTurn).toBeUndefined();
     });
+
+    it('acks a callback and routes the reply to the real chat_id (not the user_id)', async () => {
+      const finalizeInboundContext = installRuntimeSpy();
+      const answerCallback = vi.fn(async () => ({ success: true }));
+      const apiWithCb = {
+        sendAction: vi.fn(async () => undefined),
+        answerCallback,
+      } as unknown as MaxApi;
+
+      // Real MAX shape: the original message (carrying recipient.chat_id) is a
+      // sibling of `callback` on the update — NOT nested inside `callback`.
+      const update = {
+        update_type: 'message_callback',
+        timestamp: Date.now(),
+        callback: {
+          callback_id: 'cb-xyz',
+          payload: 'do_it',
+          user: { user_id: 44305013, first_name: 'P', is_bot: false },
+        },
+        message: {
+          recipient: { chat_id: 291964873, chat_type: 'dialog', user_id: 44305013 },
+          timestamp: Date.now(),
+          body: { mid: 'm0' },
+        },
+      } as unknown as MaxUpdate;
+
+      await dispatchUpdate(update, {
+        api: apiWithCb,
+        account,
+        config: {} as never,
+        abortSignal: new AbortController().signal,
+      });
+
+      // Spinner-clearing ack fired with the callback id …
+      expect(answerCallback).toHaveBeenCalledWith('cb-xyz', expect.anything());
+      // … the payload was dispatched to the agent …
+      expect(finalizeInboundContext).toHaveBeenCalledTimes(1);
+      // … and the reply targets the real DM chat (291964873), not the user_id
+      // (44305013), which would 404 on POST /messages.
+      const ctx = finalizeInboundContext.mock.calls[0][0] as { To?: string };
+      expect(ctx.To).toBe('max:291964873');
+    });
+
+    it('surfaces a forwarded message: origin author + the forwarded text', async () => {
+      const finalizeInboundContext = installRuntimeSpy();
+      // Real MAX shape: body.text is empty; the forwarded text + origin live in link.
+      const forwarded = {
+        sender: { user_id: 44305013, first_name: 'P', is_bot: false },
+        recipient: { chat_id: 291964873, chat_type: 'dialog' },
+        timestamp: Date.now(),
+        link: {
+          type: 'forward',
+          sender: { user_id: 55, first_name: 'Alice', is_bot: false },
+          chat_id: 999,
+          message: { mid: 'orig', text: 'привет из другого чата' },
+        },
+        body: { mid: 'mid.fwd', text: '' },
+      } as unknown as MaxMessage;
+
+      await processIncomingMessage(forwarded, 'ru', {
+        api,
+        account,
+        config: {} as never,
+        abortSignal: new AbortController().signal,
+      });
+
+      // Must not be dropped as "empty", and must carry both attribution and text.
+      expect(finalizeInboundContext).toHaveBeenCalledTimes(1);
+      const ctx = finalizeInboundContext.mock.calls[0][0] as { BodyForAgent?: string };
+      expect(ctx.BodyForAgent).toContain('[Forwarded from Alice]');
+      expect(ctx.BodyForAgent).toContain('привет из другого чата');
+    });
+
+    it('labels a channel-origin forward with the registry title when known', async () => {
+      const finalizeInboundContext = installRuntimeSpy();
+      const prev = process.env.OPENCLAW_STATE_DIR;
+      const dir = mkdtempSync(join(tmpdir(), 'max-fwd-'));
+      process.env.OPENCLAW_STATE_DIR = dir;
+      __resetChatRegistryForTest();
+      try {
+        upsertChat('default', {
+          chatId: -100,
+          kind: 'channel',
+          title: 'Мой Канал',
+          seenAt: Date.now(),
+        });
+        // Channel-origin forward: no link.sender, only link.chat_id.
+        const fwd = {
+          sender: { user_id: 44305013, first_name: 'P', is_bot: false },
+          recipient: { chat_id: 291964873, chat_type: 'dialog' },
+          timestamp: Date.now(),
+          link: { type: 'forward', chat_id: -100, message: { mid: 'o', text: 'channel post' } },
+          body: { mid: 'mid.fwd2', text: '' },
+        } as unknown as MaxMessage;
+
+        await processIncomingMessage(fwd, 'ru', {
+          api,
+          account,
+          config: {} as never,
+          abortSignal: new AbortController().signal,
+        });
+
+        const ctx = finalizeInboundContext.mock.calls[0][0] as { BodyForAgent?: string };
+        expect(ctx.BodyForAgent).toContain('[Forwarded from Мой Канал]');
+        expect(ctx.BodyForAgent).toContain('channel post');
+      } finally {
+        __resetChatRegistryForTest();
+        if (prev == null) delete process.env.OPENCLAW_STATE_DIR;
+        else process.env.OPENCLAW_STATE_DIR = prev;
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
   });
 
   describe('chat registry population', () => {

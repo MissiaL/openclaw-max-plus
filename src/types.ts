@@ -25,7 +25,7 @@ export interface User {
 // ─── Chat ───────────────────────────────────────────────────────
 
 export type ChatType = 'dialog' | 'chat' | 'channel';
-export type ChatStatus = 'active' | 'removed' | 'left' | 'closed';
+export type ChatStatus = 'active' | 'removed' | 'left' | 'closed' | 'suspended';
 
 export interface Chat {
   chat_id: number;
@@ -364,6 +364,20 @@ export interface MaxChat {
   pinned_message?: MaxMessage | null;
 }
 
+/** Bot's own membership in a chat — GET /chats/{chatId}/members/me. */
+export interface MaxChatMember {
+  user_id: number;
+  first_name?: string;
+  last_name?: string | null;
+  username?: string | null;
+  is_owner?: boolean;
+  is_admin?: boolean;
+  /** Admin permission slugs, e.g. "pin_message", "add_remove_members". */
+  permissions?: string[] | null;
+  join_time?: number;
+  last_access_time?: number;
+}
+
 export interface MaxRecipient {
   chat_id?: number;
   chat_type?: string;
@@ -417,6 +431,24 @@ export type MaxUpdateType =
   | 'dialog_muted'
   | 'dialog_unmuted';
 
+/**
+ * Update types the bot subscribes to — the single source of truth shared by the
+ * long-polling loop (monitor.ts `getUpdates` types=) and the webhook subscription
+ * (webhook.ts `update_types`). Keep poll and webhook allowlists identical by
+ * referencing this constant from both. Note: `user_added`/`user_removed` are
+ * intentionally omitted (not consumed by the dispatcher).
+ */
+export const MAX_SUBSCRIBED_UPDATE_TYPES: readonly MaxUpdateType[] = [
+  'message_created',
+  'message_callback',
+  'message_edited',
+  'message_removed',
+  'bot_started',
+  'bot_added',
+  'bot_removed',
+  'chat_title_changed',
+] as const;
+
 export interface MaxUpdate {
   update_type: MaxUpdateType;
   timestamp: number;
@@ -434,11 +466,27 @@ export interface MaxUpdate {
 }
 
 export interface MaxInlineKeyboardButton {
-  type: 'callback' | 'link' | 'request_contact' | 'request_geo_location' | 'open_app' | 'message';
+  type:
+    | 'callback'
+    | 'link'
+    | 'request_contact'
+    | 'request_geo_location'
+    | 'open_app'
+    | 'message'
+    | 'clipboard';
   text: string;
+  /** callback / clipboard / open_app payload */
   payload?: string;
+  /** link button URL */
   url?: string;
+  /** callback button colour */
   intent?: 'default' | 'positive' | 'negative';
+  /** request_geo_location: skip the confirmation prompt */
+  quick?: boolean;
+  /** open_app: mini-app URL */
+  web_app?: string;
+  /** open_app: pass a contact id to the mini-app */
+  contact_id?: number;
 }
 
 export interface MaxInlineKeyboardAttachment {

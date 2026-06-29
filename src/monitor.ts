@@ -36,6 +36,7 @@ import {
   sendMaxMessage,
 } from './send.js';
 import { rememberStickerCode } from './sticker-cache.js';
+import { MAX_SUBSCRIBED_UPDATE_TYPES } from './types.js';
 import {
   type MaxWebhookTarget,
   registerMaxWebhookTarget,
@@ -86,16 +87,7 @@ async function startMaxPollingLoop(opts: MaxMonitorOptions): Promise<void> {
           {
             timeout: 30,
             marker: marker ?? undefined,
-            types: [
-              'message_created',
-              'message_callback',
-              'message_edited',
-              'message_removed',
-              'bot_started',
-              'bot_added',
-              'bot_removed',
-              'chat_title_changed',
-            ],
+            types: [...MAX_SUBSCRIBED_UPDATE_TYPES],
           },
           abortSignal,
         );
@@ -256,7 +248,10 @@ export async function dispatchUpdate(update: MaxUpdate, opts: MaxMonitorOptions)
     case 'message_callback': {
       if (!update.callback) break;
       statusSink?.({ lastInboundAt: Date.now() });
-      await processCallback(update.callback, opts);
+      // The original message (carrying recipient.chat_id) is a SIBLING of
+      // `callback` on the update, not nested inside it — pass it through so the
+      // reply targets the real chat instead of falling back to the user_id.
+      await processCallback(update.callback, update.message, opts);
       break;
     }
 
@@ -381,6 +376,24 @@ export async function processIncomingMessage(
     (message as MaxMessage & { __maxCallback?: boolean }).__maxCallback === true;
   const attachments = message.body.attachments ?? [];
 
+  // Forwarded messages: MAX leaves body.text empty and puts the forwarded text
+  // in link.message (sent flat as `{mid, text}`) plus the origin author/chat in
+  // `link`. Extract both so the forward isn't seen as empty and the agent gets
+  // the content with attribution.
+  const forwardedLink = message.link?.type === 'forward' ? message.link : undefined;
+  const forwardedMsg = forwardedLink?.message as
+    { text?: string; body?: { text?: string } } | undefined;
+  const forwardedText = (forwardedMsg?.text ?? forwardedMsg?.body?.text ?? '').trim();
+  const forwardOrigin = forwardedLink
+    ? (forwardedLink.sender?.first_name ??
+      (forwardedLink.chat_id != null
+        ? // Prefer a known chat/channel title from the registry (for chats the
+          // bot is in); fall back to the raw id for external channels.
+          (getChatTitle(account.accountId, forwardedLink.chat_id) ??
+          `chat ${forwardedLink.chat_id}`)
+        : 'channel'))
+    : undefined;
+
   log?.debug?.(
     `[${account.accountId}] Processing message: mid=${messageId} chatId=${message.recipient.chat_id} chatType=${message.recipient.chat_type} senderId=${message.sender?.user_id} text="${rawText.slice(0, 50)}" attachments=${attachments.length}`,
   );
@@ -458,7 +471,7 @@ export async function processIncomingMessage(
 
   const attachmentText = attachmentDescriptions.join(' ');
   const hasMedia = mediaPaths.length > 0;
-  const effectiveText = rawText.trim() || attachmentText;
+  const effectiveText = rawText.trim() || attachmentText || forwardedText;
 
   // Skip truly empty messages (no text, no media, no meaningful attachments)
   if (!effectiveText && !hasMedia) return;
@@ -626,11 +639,20 @@ export async function processIncomingMessage(
   });
 
   // Combine text and attachment descriptions for the agent
-  const bodyForAgent = attachmentText
+  const combinedBody = attachmentText
     ? rawText.trim()
       ? `${rawText.trim()}\n${attachmentText}`
       : attachmentText
     : rawText;
+
+  // Forwarded message: prepend attribution, then the forwarded text (from
+  // link.message, since body.text is empty), then any comment/attachments the
+  // forwarder added. forwardOrigin/forwardedText are resolved above.
+  const bodyForAgent = forwardOrigin
+    ? `[Forwarded from ${forwardOrigin}]\n${[forwardedText, combinedBody.trim()]
+        .filter(Boolean)
+        .join('\n')}`
+    : combinedBody;
 
   const body = core.channel.reply.formatAgentEnvelope({
     channel: 'MAX',
@@ -743,7 +765,11 @@ export async function processIncomingMessage(
   const useEditStreaming = streamMode === 'partial';
   const useBlockStreaming = streamMode === 'block';
   const replyMid = isCallbackCommand ? undefined : messageId.replace(/_edited_\d+$/, '');
-  const callbackId = isCallbackCommand ? messageId : undefined;
+  // Callbacks are acknowledged immediately in processCallback (spinner clear +
+  // toast). The reply is then delivered as a normal message — NOT via /answers —
+  // so we never answer the same callback_id twice (the second would 400 and the
+  // reply has no /answers fallback). Hence no callbackId is threaded to delivery.
+  const callbackId: string | undefined = undefined;
 
   // Draft stream for edit-streaming (like Telegram's partial reply approach)
   let draftMid: string | null = null;
@@ -911,16 +937,39 @@ export async function processIncomingMessage(
   await draftClear();
 }
 
-async function processCallback(callback: MaxCallback, opts: MaxMonitorOptions): Promise<void> {
+/** Toast shown the instant a callback button is pressed, before the (slow) agent
+ *  reply. MAX keeps a loading spinner on the button until POST /answers is called;
+ *  acking immediately clears it so the press registers even on the web client
+ *  (which does not render the typing indicator). */
+const MAX_CALLBACK_ACK_TOAST = '⏳ Думаю…';
+
+async function processCallback(
+  callback: MaxCallback,
+  originalMessage: MaxMessage | undefined,
+  opts: MaxMonitorOptions,
+): Promise<void> {
   const payload = callback.payload ?? '';
   if (!payload.trim()) return;
+
+  // Instant feedback: clear the button spinner right away. The agent's reply
+  // arrives later as a normal message (delivery no longer goes through /answers,
+  // so this single ack never double-answers the callback_id).
+  void opts.api
+    .answerCallback(callback.callback_id, { notification: MAX_CALLBACK_ACK_TOAST })
+    .catch((err) =>
+      opts.log?.debug?.(`[${opts.account.accountId}] callback ack failed: ${String(err)}`),
+    );
 
   // Synthesize as a regular message. callback_id is not a valid MAX message id,
   // so replies to callback-originated commands must not use it as replyToMessageId.
   const syntheticMessage: MaxMessage & { __maxCallback?: boolean } = {
     __maxCallback: true,
     sender: callback.user,
-    recipient: callback.message?.recipient ?? { chat_id: callback.user.user_id },
+    // Prefer the original message's recipient (real chat_id); fall back to the
+    // legacy callback.message and finally the user_id. Sending to a user_id as a
+    // chat_id 404s, so the real chat_id from update.message is essential in DMs.
+    recipient: originalMessage?.recipient ??
+      callback.message?.recipient ?? { chat_id: callback.user.user_id },
     timestamp: callback.timestamp,
     body: {
       mid: callback.callback_id,

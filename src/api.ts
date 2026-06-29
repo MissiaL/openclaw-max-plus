@@ -1,14 +1,22 @@
 /**
- * MAX Bot API client — thin wrapper around platform-api.max.ru
+ * MAX Bot API client — thin wrapper around the MAX platform API.
  *
  * API docs: https://dev.max.ru/docs-api
  * Auth: Authorization header with bot token
  * Rate limit: 30 rps
+ *
+ * Base URL: defaults to https://platform-api2.max.ru (legacy platform-api.max.ru
+ * retires 2026-07-19). platform-api2 is signed by the Минцифры root CA, which the
+ * plugin bundles and auto-trusts per-process (see ca-trust.ts) — no system cert
+ * install needed. Override via `opts.baseUrl`, the `MAX_API_BASE_URL` env var, or
+ * the per-account `apiBaseUrl` config (e.g. to fall back to the legacy domain).
  */
 
+import { ensureMaxTrustedCa } from './ca-trust.js';
 import type {
   MaxBotCommand,
   MaxChat,
+  MaxChatMember,
   MaxMessage,
   MaxNewMessageBody,
   MaxSendResult,
@@ -25,6 +33,7 @@ export type {
   MaxBotCommand,
   MaxCallback,
   MaxChat,
+  MaxChatMember,
   MaxInlineKeyboardAttachment,
   MaxInlineKeyboardButton,
   MaxLinkedMessage,
@@ -45,7 +54,7 @@ export type {
   MaxUser,
 } from './types.js';
 
-const BASE_URL = 'https://platform-api.max.ru';
+const BASE_URL = 'https://platform-api2.max.ru';
 
 // ────────────────────── API Client ──────────────────────
 
@@ -72,8 +81,13 @@ export class MaxApi {
   private timeoutMs: number;
 
   constructor(opts: MaxApiOptions) {
+    // Trust the bundled Минцифры root CA so platform-api2.max.ru works over TLS
+    // without a system-wide cert install. No-op on the legacy domain / old Node.
+    ensureMaxTrustedCa();
     this.token = opts.token;
-    this.baseUrl = opts.baseUrl ?? BASE_URL;
+    // Resolution order: explicit opt → MAX_API_BASE_URL env (global operator
+    // escape hatch) → migrated default. Empty strings fall through to default.
+    this.baseUrl = opts.baseUrl?.trim() || process.env.MAX_API_BASE_URL?.trim() || BASE_URL;
     this.timeoutMs = opts.timeoutMs ?? 10_000;
   }
 
@@ -224,7 +238,9 @@ export class MaxApi {
     if (params?.message_ids) qp.message_ids = params.message_ids.join(',');
     if (params?.from) qp.from = params.from;
     if (params?.to) qp.to = params.to;
-    if (params?.count) qp.count = params.count;
+    // MAX requires count ∈ [1, 100]; clamp out-of-range values instead of
+    // forwarding them (0/negative/>100 → 400 Bad Request).
+    if (params?.count != null) qp.count = Math.min(100, Math.max(1, Math.trunc(params.count)));
     return this.request('GET', '/messages', qp);
   }
 
@@ -244,6 +260,36 @@ export class MaxApi {
 
   async getChat(chatId: number): Promise<MaxChat> {
     return this.request('GET', `/chats/${chatId}`);
+  }
+
+  /**
+   * The bot's own membership in a chat (admin/owner flags + permissions).
+   * Use as a preflight before privileged actions (pin, member management).
+   * Throws (typically 404) when the bot is not a member of the chat.
+   */
+  async getMyMembership(chatId: number): Promise<MaxChatMember> {
+    return this.request('GET', `/chats/${chatId}/members/me`);
+  }
+
+  // ── Pinned message ──
+  // Requires the bot to be an admin; only group chats / channels (not 1:1 dialogs).
+
+  async pinMessage(
+    chatId: number,
+    messageId: string,
+    opts?: { notify?: boolean },
+  ): Promise<MaxSimpleResult> {
+    const body: { message_id: string; notify?: boolean } = { message_id: messageId };
+    if (opts?.notify != null) body.notify = opts.notify;
+    return this.request('PUT', `/chats/${chatId}/pin`, undefined, body);
+  }
+
+  async unpinMessage(chatId: number): Promise<MaxSimpleResult> {
+    return this.request('DELETE', `/chats/${chatId}/pin`);
+  }
+
+  async getPinnedMessage(chatId: number): Promise<{ message: MaxMessage | null }> {
+    return this.request('GET', `/chats/${chatId}/pin`);
   }
 
   // ── Chat actions ──
@@ -380,9 +426,25 @@ export class MaxApi {
         mimeType = ext ? mimeMap[ext] : 'application/octet-stream';
       }
     } else {
-      // Already a buffer
+      // Already a buffer (e.g. inline base64 the host handed us). Give the blob
+      // a filename WITH an extension derived from the MIME — MAX's image/media
+      // pipeline rejects an extension-less octet-stream ("IMAGE_INVALID_FORMAT").
       fileBuffer = Buffer.from(data);
       mimeType = mimeType ?? 'application/octet-stream';
+      const extByMime: Record<string, string> = {
+        'image/png': 'png',
+        'image/jpeg': 'jpg',
+        'image/gif': 'gif',
+        'image/webp': 'webp',
+        'video/mp4': 'mp4',
+        'video/quicktime': 'mov',
+        'audio/mpeg': 'mp3',
+        'audio/ogg': 'ogg',
+        'audio/wav': 'wav',
+        'application/pdf': 'pdf',
+      };
+      const ext = extByMime[mimeType];
+      if (ext) fileName = `file.${ext}`;
     }
 
     // Step 3: POST file as multipart/form-data to upload URL

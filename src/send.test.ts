@@ -6,11 +6,16 @@ import type { OpenClawConfig } from 'openclaw/plugin-sdk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  answerMaxCallback,
   deleteMaxMessage,
   editMaxMessage,
+  getMaxMembership,
+  pinMaxMessage,
+  resolveInlineMedia,
   sendMaxMediaMessage,
   sendMaxMessage,
   sendMaxSticker,
+  splitMediaCaption,
 } from './send.js';
 
 const MOCK_TOKEN = 'test-token';
@@ -18,6 +23,137 @@ const MOCK_TOKEN = 'test-token';
 describe('MAX Message Sending', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('special inline buttons', () => {
+    function bodyOf(buttons: unknown): string {
+      const [, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+      void buttons;
+      return String(init.body);
+    }
+
+    it('emits callback intent, link, request_contact, request_geo_location, open_app, message and clipboard buttons', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ message: { body: { mid: 'mb' }, recipient: { chat_id: 1 } } }),
+      });
+
+      await sendMaxMessage('1', 'pick', {
+        token: MOCK_TOKEN,
+        buttons: [
+          [
+            { text: 'OK', payload: 'ok', intent: 'positive' },
+            { text: 'Site', url: 'https://a.example' },
+          ],
+          [
+            { text: 'Phone', type: 'request_contact' },
+            { text: 'Where', type: 'request_geo_location', quick: true },
+          ],
+          [
+            { text: 'App', type: 'open_app', webApp: 'https://app.example', contactId: 42 },
+            { text: 'Echo', type: 'message' },
+            { text: 'Copy', type: 'clipboard', payload: 'COPIED' },
+          ],
+        ],
+      });
+
+      const body = bodyOf(null);
+      expect(body).toContain('"type":"callback"');
+      expect(body).toContain('"intent":"positive"');
+      expect(body).toContain('"type":"link"');
+      expect(body).toContain('"type":"request_contact"');
+      expect(body).toContain('"type":"request_geo_location"');
+      expect(body).toContain('"quick":true');
+      expect(body).toContain('"type":"open_app"');
+      expect(body).toContain('"web_app":"https://app.example"');
+      expect(body).toContain('"contact_id":42');
+      expect(body).toContain('"type":"message"');
+      expect(body).toContain('"type":"clipboard"');
+      expect(body).toContain('"payload":"COPIED"');
+    });
+  });
+
+  describe('forward', () => {
+    it('should attach a forward link when forwardMessageId is set', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ message: { body: { mid: 'm2' }, recipient: { chat_id: 1 } } }),
+      });
+
+      await sendMaxMessage('1', '', { token: MOCK_TOKEN, forwardMessageId: 'orig-mid' });
+
+      const [, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(String(init.body)).toContain('"link":{"type":"forward","mid":"orig-mid"}');
+    });
+
+    it('should prefer forward over reply when both are set', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ message: { body: { mid: 'm3' }, recipient: { chat_id: 1 } } }),
+      });
+
+      await sendMaxMessage('1', 'note', {
+        token: MOCK_TOKEN,
+        forwardMessageId: 'orig-mid',
+        replyToMessageId: 'reply-mid',
+      });
+
+      const [, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(String(init.body)).toContain('"type":"forward"');
+      expect(String(init.body)).not.toContain('reply-mid');
+    });
+  });
+
+  describe('getMaxMembership', () => {
+    it('reports admin membership from /members/me', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ user_id: 1, is_admin: true, permissions: ['pin_message'] }),
+      });
+      const m = await getMaxMembership('max:5', { token: MOCK_TOKEN });
+      expect(m.isMember).toBe(true);
+      expect(m.isAdmin).toBe(true);
+    });
+
+    it('returns non-member when the API rejects (e.g. 404)', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        json: async () => ({ code: 'not.found' }),
+      });
+      const m = await getMaxMembership('max:5', { token: MOCK_TOKEN });
+      expect(m.isMember).toBe(false);
+      expect(m.isAdmin).toBe(false);
+    });
+  });
+
+  describe('pinMaxMessage', () => {
+    it('should pin a message in the target chat', async () => {
+      global.fetch = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true }) });
+
+      await pinMaxMessage('max:777', 'mid-9', { token: MOCK_TOKEN, notify: true });
+
+      const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(String(url)).toContain('/chats/777/pin');
+      expect(init.method).toBe('PUT');
+      expect(String(init.body)).toContain('"message_id":"mid-9"');
+    });
+  });
+
+  describe('answerMaxCallback', () => {
+    it('should include a toast notification in the /answers body', async () => {
+      global.fetch = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true }) });
+
+      await answerMaxCallback('cb-1', '', { token: MOCK_TOKEN, notification: 'Model switched' });
+
+      const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(String(url)).toContain('/answers');
+      expect(String(init.body)).toContain('"notification":"Model switched"');
+    });
   });
 
   describe('sendMaxMessage', () => {
@@ -72,6 +208,25 @@ describe('MAX Message Sending', () => {
     it('should throw error when no token available', async () => {
       const cfg: OpenClawConfig = { channels: { max: {} } };
       await expect(sendMaxMessage('123', 'Hello', { cfg })).rejects.toThrow('token not available');
+    });
+
+    it('should route requests through the config apiBaseUrl override', async () => {
+      const cfg: OpenClawConfig = {
+        channels: {
+          max: { botToken: 'config-token', apiBaseUrl: 'https://custom-api.max.ru' },
+        },
+      };
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ message: { body: { mid: 'm1' }, recipient: { chat_id: 1 } } }),
+      });
+
+      await sendMaxMessage('1', 'Hi', { cfg });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('https://custom-api.max.ru'),
+        expect.anything(),
+      );
     });
 
     it('should send message with markdown format', async () => {
@@ -224,6 +379,53 @@ describe('MAX Message Sending', () => {
           method: 'DELETE',
         }),
       );
+    });
+  });
+
+  describe('resolveInlineMedia', () => {
+    const png = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.alloc(300),
+    ]);
+
+    it('decodes a base64 data: URI image', () => {
+      const r = resolveInlineMedia(`data:image/png;base64,${png.toString('base64')}`);
+      expect(r?.type).toBe('image');
+      expect(r?.buffer.subarray(0, 4).toString('hex')).toBe('89504e47');
+    });
+
+    it('decodes raw base64 with recognizable image magic bytes', () => {
+      const r = resolveInlineMedia(png.toString('base64'));
+      expect(r?.type).toBe('image');
+    });
+
+    it('returns undefined for a normal file path', () => {
+      expect(resolveInlineMedia('cat-for-max.png')).toBeUndefined();
+    });
+
+    it('returns undefined for an http url', () => {
+      expect(resolveInlineMedia('https://example.com/cat.png')).toBeUndefined();
+    });
+  });
+
+  describe('splitMediaCaption', () => {
+    const naiveChunk = (t: string, limit: number): string[] =>
+      t.match(new RegExp(`.{1,${limit}}`, 'gs')) ?? [];
+
+    it('keeps a short caption on the media with no follow-ups', () => {
+      const { mediaCaption, followups } = splitMediaCaption('short', naiveChunk);
+      expect(mediaCaption).toBe('short');
+      expect(followups).toEqual([]);
+    });
+
+    it('splits an over-4000 caption: first chunk on media, rest as follow-ups', () => {
+      const caption = 'x'.repeat(9000);
+      const { mediaCaption, followups } = splitMediaCaption(caption, naiveChunk);
+      expect(mediaCaption.length).toBe(4000);
+      expect(followups).toHaveLength(2);
+      expect(followups[0].length).toBe(4000);
+      expect(followups[1].length).toBe(1000);
+      expect(mediaCaption + followups.join('')).toBe(caption);
     });
   });
 
