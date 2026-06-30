@@ -1,6 +1,12 @@
 # openclaw-max-plus – плагин MAX для OpenClaw
 
+[![license](https://img.shields.io/github/license/MissiaL/openclaw-max-plus)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-ESM-blue)](https://www.typescriptlang.org/)
+[![Node](https://img.shields.io/badge/node-%E2%89%A522.15-green)](https://nodejs.org/)
+
 Канал-плагин для подключения AI-ассистента [OpenClaw](https://openclaw.ai) к мессенджеру [MAX](https://max.ru) (max.ru Bot API).
+
+> **English:** `openclaw-max-plus` is a channel plugin that connects the [OpenClaw](https://openclaw.ai) AI assistant to the [MAX messenger](https://max.ru) (max.ru Bot API). It brings Telegram-level parity to MAX: text & markdown, media (photo/video/file/sticker/contact/location, incl. inline base64), inline buttons, reply/forward/edit/delete, pin/unpin, response streaming, typing indicator, long polling **and** webhook, multi-account, and DM security. Written in TypeScript (ESM), requires Node.js ≥ 22.15. Full setup guide below is in Russian.
 
 ## Что это
 
