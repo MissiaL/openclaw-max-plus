@@ -376,25 +376,33 @@ describe('MaxApi', () => {
 
   describe('setMyCommands', () => {
     it('should set bot commands', async () => {
-      global.fetch = vi.fn().mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ success: true }),
-      });
-
       const commands = [
         { name: 'start', description: 'Start bot' },
         { name: 'help', description: 'Show help' },
       ];
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ commands }),
+      });
 
-      await api.setMyCommands(commands);
+      expect(await api.setMyCommands(commands)).toEqual({ commands });
 
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/me'),
+        `${MOCK_BASE_URL}/me/commands`,
         expect.objectContaining({
           method: 'PATCH',
           body: JSON.stringify({ commands }),
         }),
       );
+    });
+
+    it('clears the menu with an empty array', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true, json: async () => ({ commands: [] }),
+      });
+      await api.setMyCommands([]);
+      expect(global.fetch).toHaveBeenCalledWith(`${MOCK_BASE_URL}/me/commands`,
+        expect.objectContaining({ method: 'PATCH', body: '{"commands":[]}' }));
     });
   });
 

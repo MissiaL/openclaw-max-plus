@@ -24,6 +24,7 @@ import { listMaxAccountIds, type ResolvedMaxAccount, resolveMaxAccount } from '.
 import { maxMessageActions } from './actions.js';
 import { MaxApi } from './api.js';
 import { listChats } from './chat-registry.js';
+import { syncMaxCommands } from './commands.js';
 import { MaxConfigSchema } from './config-schema.js';
 import {
   buildMaxModelBrowseChannelData,
@@ -749,17 +750,7 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount> = {
 
       const api = new MaxApi({ token, baseUrl: account.config.apiBaseUrl });
 
-      // Register bot commands if configured
-      const commands = ctx.cfg.channels?.max?.commands as
-        Array<{ name: string; description?: string }> | undefined;
-      if (commands?.length) {
-        try {
-          await api.setMyCommands(commands);
-          ctx.log?.info(`[${account.accountId}] Registered ${commands.length} bot commands`);
-        } catch (err) {
-          ctx.log?.error(`[${account.accountId}] Failed to register commands: ${String(err)}`);
-        }
-      }
+      await syncMaxCommands({ cfg: ctx.cfg, account, api, log: ctx.log });
 
       return startMaxPolling({
         api,

@@ -2,7 +2,7 @@
   "id": "openclaw-max-plus",
   "name": "MAX",
   "description": "MAX messenger channel plugin (max.ru Bot API, long polling)",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "channels": [
     "max"
   ],
@@ -153,6 +153,37 @@
                 },
                 "tokenFile": {
                   "type": "string"
+                },
+                "commands": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "auto"
+                    },
+                    {
+                      "type": "array",
+                      "maxItems": 32,
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 64
+                          },
+                          "description": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  ]
                 }
               },
               "additionalProperties": true
@@ -195,6 +226,37 @@
           },
           "tokenFile": {
             "type": "string"
+          },
+          "commands": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "auto"
+              },
+              {
+                "type": "array",
+                "maxItems": 32,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "description": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            ]
           }
         },
         "additionalProperties": true

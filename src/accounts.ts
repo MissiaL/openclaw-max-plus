@@ -7,6 +7,8 @@ import { readFileSync } from 'node:fs';
 import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from 'openclaw/plugin-sdk/core';
 
+import type { MaxBotCommand } from './types.js';
+
 /** Read a bot token from a file path (trimmed). Returns undefined on any error. */
 function readTokenFile(path: string | undefined): string | undefined {
   const p = path?.trim();
@@ -35,6 +37,7 @@ export interface MaxAccountConfig {
   webhookPath?: string;
   mediaMaxMb?: number;
   streamMode?: 'off' | 'partial' | 'block';
+  commands?: 'auto' | MaxBotCommand[];
 }
 
 export interface ResolvedMaxAccount {
@@ -125,6 +128,7 @@ export function resolveMaxAccount(params: {
       webhookPath: section.webhookPath as string | undefined,
       mediaMaxMb: section.mediaMaxMb as number | undefined,
       streamMode: section.streamMode as MaxAccountConfig['streamMode'],
+      commands: section.commands as MaxAccountConfig['commands'],
     };
 
     if (accountConfig.botToken?.trim()) {
@@ -159,6 +163,7 @@ export function resolveMaxAccount(params: {
       webhookPath: raw.webhookPath as string | undefined,
       mediaMaxMb: raw.mediaMaxMb as number | undefined,
       streamMode: raw.streamMode as MaxAccountConfig['streamMode'],
+      commands: (raw.commands ?? section.commands) as MaxAccountConfig['commands'],
     };
 
     if (accountConfig.botToken?.trim()) {

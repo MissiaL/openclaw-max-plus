@@ -358,11 +358,9 @@ export class MaxApi {
 
   // ── Commands ──
 
-  async setMyCommands(commands: MaxBotCommand[]): Promise<MaxSimpleResult> {
-    // MAX has no POST /me/commands endpoint. Bot commands are set via PATCH /me
-    // (editMyInfo) where `commands` is a field of the BotPatch body. Sending only
-    // `{ commands }` is a partial update and leaves other bot fields untouched.
-    return this.request('PATCH', '/me', undefined, { commands });
+  async setMyCommands(commands: MaxBotCommand[]): Promise<{ commands?: MaxBotCommand[] }> {
+    // The dedicated endpoint replaces the menu; [] removes all commands.
+    return this.request('PATCH', '/me/commands', undefined, { commands });
   }
 
   // ── Upload ──

@@ -116,15 +116,19 @@ export const MaxAccountSchemaBase = z
         z.union([z.boolean(), z.enum(['pairing', 'allowlist', 'open'])]).optional(),
       )
       .optional(),
-    // Bot commands registered via PATCH /me. Read in channel.ts on provider start.
+    // Bot menu registered via PATCH /me/commands on account start.
     commands: z
-      .array(
-        z.object({
-          name: z.string().min(1).max(64),
-          description: z.string().min(1).max(128).optional(),
-        }),
-      )
-      .max(32)
+      .union([
+        z.literal('auto'),
+        z
+          .array(
+            z.object({
+              name: z.string().min(1).max(64),
+              description: z.string().min(1).max(128).optional(),
+            }),
+          )
+          .max(32),
+      ])
       .optional(),
   })
   .strict();
