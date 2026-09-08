@@ -24,6 +24,7 @@ import {
   startMaxPolling,
 } from './monitor.js';
 import { getMaxRuntime, setMaxRuntime } from './runtime.js';
+import * as maxSend from './send.js';
 
 describe('MAX Monitor', () => {
   describe('startMaxPolling', () => {
@@ -75,7 +76,10 @@ describe('MAX Monitor', () => {
             finalizeInboundContext,
             dispatchReplyWithBufferedBlockDispatcher: vi.fn(async () => undefined),
           },
-          text: {},
+          text: {
+            resolveChunkMode: vi.fn(() => 'length'),
+            chunkMarkdownTextWithMode: vi.fn((text: string) => [text]),
+          },
           media2: {},
         },
       } as never);
@@ -100,6 +104,69 @@ describe('MAX Monitor', () => {
         body: { mid: 'mid.test', text },
       } as unknown as MaxMessage;
     }
+
+    it.each([0, 1500])(
+      'finalizes one draft when the first send is still pending after %i ms',
+      async (delay) => {
+        installRuntimeSpy();
+        vi.useFakeTimers();
+        const deferred = <T>() => {
+          let resolve!: (value: T) => void;
+          const promise = new Promise<T>((done) => {
+            resolve = done;
+          });
+          return { promise, resolve };
+        };
+        const started = deferred<void>();
+        const pendingSend = deferred<Awaited<ReturnType<typeof maxSend.sendMaxMessage>>>();
+        const send = vi.spyOn(maxSend, 'sendMaxMessage').mockImplementation(() => {
+          started.resolve();
+          return pendingSend.promise;
+        });
+        const edit = vi.spyOn(maxSend, 'editMaxMessage').mockResolvedValue(undefined);
+        const partial = 'Привет, Пётр! Всё отлично, работаю в штатном режиме.';
+        const final = `${partial} Как твои дела?`;
+        vi.mocked(
+          getMaxRuntime().channel.reply.dispatchReplyWithBufferedBlockDispatcher,
+        ).mockImplementation(async ({ replyOptions, dispatcherOptions }) => {
+          replyOptions?.onPartialReply?.({ text: partial });
+          await started.promise;
+          vi.setSystemTime(Date.now() + delay);
+          replyOptions?.onPartialReply?.({ text: `${partial} Как` });
+          let delivered = false;
+          const delivery = Promise.resolve(
+            dispatcherOptions.deliver({ text: final }, { kind: 'final' }),
+          ).then(() => {
+            delivered = true;
+          });
+          await Promise.resolve();
+          await Promise.resolve();
+          expect(send).toHaveBeenCalledTimes(1);
+          expect(delivered).toBe(false);
+          pendingSend.resolve({ messageId: 'mid.draft', raw: {} as never });
+          await delivery;
+          return undefined as never;
+        });
+        try {
+          await processIncomingMessage(dmMessage('Привет, как дела?'), 'ru', {
+            api,
+            account: { ...account, config: { ...account.config, streamMode: 'partial' } },
+            config: {} as never,
+            abortSignal: new AbortController().signal,
+          });
+          await vi.advanceTimersByTimeAsync(2000);
+          expect(send).toHaveBeenCalledTimes(1);
+          expect(edit).toHaveBeenCalledExactlyOnceWith('mid.draft', final, {
+            token: 'tok',
+            format: 'markdown',
+          });
+        } finally {
+          pendingSend.resolve({ messageId: 'mid.draft', raw: {} as never });
+          vi.useRealTimers();
+          vi.restoreAllMocks();
+        }
+      },
+    );
 
     it.each([
       [1001, 9001, 'main'],

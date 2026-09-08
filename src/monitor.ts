@@ -222,14 +222,15 @@ export async function dispatchUpdate(update: MaxUpdate, opts: MaxMonitorOptions)
     case 'message_created': {
       if (!update.message) {
         // MAX violates its own OpenAPI contract (message is required) for
-        // native voice notes recorded with the mic: the bot receives a
+        // native voice notes in long polling: the bot receives a
         // bodyless message_created with no message/chat_id/mid, and the note
         // never appears in chat history either. There is nothing the plugin
         // can act on (not even a chat to reply to) — this is a MAX platform
-        // limitation. Forwarded/attached audio FILES do arrive normally (as
+        // limitation of that delivery path; webhooks can deliver native audio.
+        // Forwarded/attached audio FILES do arrive normally (as
         // type:"file"). Logged so the silent drop is visible during debugging.
         log?.warn?.(
-          `[${account.accountId}] message_created without message — likely a native voice note (MAX does not deliver these to bots); skipping`,
+          `[${account.accountId}] message_created without message — likely a native voice note (try webhook delivery instead of polling); skipping`,
         );
         break;
       }
@@ -778,11 +779,19 @@ export async function processIncomingMessage(
   let draftLastEditAt = 0;
   let draftTimer: ReturnType<typeof setTimeout> | null = null;
   let draftStopped = false;
+  let draftQueue: Promise<void> = Promise.resolve();
   const DRAFT_THROTTLE_MS = 1200;
   const DRAFT_MAX_CHARS = 4000;
   const DRAFT_MIN_CHARS = 30; // Don't send until we have enough text
 
-  const draftUpdate = async (text: string) => {
+  // Partial callbacks are fire-and-forget. Serialize their network requests so
+  // another chunk cannot create a second draft before the first POST returns.
+  const draftUpdate = (text: string): Promise<void> => {
+    draftQueue = draftQueue.then(() => writeDraft(text));
+    return draftQueue;
+  };
+
+  const writeDraft = async (text: string) => {
     if (draftStopped || !text) return;
     const trimmed = text.trimEnd();
     if (!trimmed || trimmed === draftLastText) return;
@@ -840,6 +849,9 @@ export async function processIncomingMessage(
       draftTimer = null;
     }
     draftStopped = true;
+    // A POST already in flight may still assign draftMid. Final delivery must
+    // wait for it, while queued updates see draftStopped and do nothing.
+    await draftQueue;
   };
 
   await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
@@ -849,6 +861,7 @@ export async function processIncomingMessage(
       ...prefixOptions,
       ...(onReplyStart ? { onReplyStart } : {}),
       deliver: async (payload) => {
+        if (useEditStreaming) await draftClear();
         const finalText = payload.text;
         // Edit-streaming finalize: replace the draft with the final text — but
         // only when it fits the single-message cap. A longer answer cannot be an
