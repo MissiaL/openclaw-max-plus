@@ -14,7 +14,10 @@
  *   5. Delete message
  */
 
-const API = "https://platform-api.max.ru";
+import { ensureMaxTrustedCa } from "../dist/src/ca-trust.js";
+
+ensureMaxTrustedCa();
+const API = process.env.MAX_API_BASE_URL?.trim() || "https://platform-api2.max.ru";
 const TOKEN = process.env.MAX_BOT_TOKEN;
 const CHAT_ID = process.argv[2];
 const TEXT = process.argv[3] || "🤖 Тестовое сообщение от MAX-бота";

@@ -3,9 +3,10 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { Socket } from 'node:net';
 import { Readable } from 'node:stream';
 
-import type { OpenClawConfig } from 'openclaw/plugin-sdk';
+import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ResolvedMaxAccount } from './accounts.js';
@@ -38,6 +39,7 @@ function createMockRequest(
     method,
     url,
     headers,
+    socket: new Socket(),
   }) as IncomingMessage;
 }
 

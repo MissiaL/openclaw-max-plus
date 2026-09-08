@@ -6,8 +6,8 @@
 
 import type { GroupToolPolicyConfig } from 'openclaw/plugin-sdk/channel-policy';
 import { resolveToolsBySender } from 'openclaw/plugin-sdk/channel-policy';
-import type { ChannelMeta, ChannelPlugin } from 'openclaw/plugin-sdk/channel-runtime';
 import { PAIRING_APPROVED_MESSAGE } from 'openclaw/plugin-sdk/channel-status';
+import type { ChannelMeta, ChannelPlugin } from 'openclaw/plugin-sdk/core';
 import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
 import {
   applyAccountNameToChannelSection,

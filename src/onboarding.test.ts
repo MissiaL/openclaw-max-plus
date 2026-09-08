@@ -2,7 +2,7 @@
  * Tests for MAX onboarding adapter
  */
 
-import type { OpenClawConfig } from 'openclaw/plugin-sdk';
+import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
 import { describe, expect, it } from 'vitest';
 
 import { maxSetupWizard } from './onboarding.js';

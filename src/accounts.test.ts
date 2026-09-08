@@ -2,7 +2,7 @@
  * Tests for MAX account resolution
  */
 
-import type { OpenClawConfig } from 'openclaw/plugin-sdk';
+import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
 import { describe, expect, it } from 'vitest';
 
 import { listMaxAccountIds, resolveDefaultMaxAccountId, resolveMaxAccount } from './accounts.js';

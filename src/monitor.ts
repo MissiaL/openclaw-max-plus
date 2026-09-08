@@ -5,8 +5,8 @@
  * finalizeInboundContext → dispatchReplyWithBufferedBlockDispatcher
  */
 
-import type { ChannelLogSink } from 'openclaw/plugin-sdk/channel-runtime';
-import { createReplyPrefixOptions } from 'openclaw/plugin-sdk/channel-runtime';
+import type { ChannelLogSink } from 'openclaw/plugin-sdk/channel-contract';
+import { createReplyPrefixOptions } from 'openclaw/plugin-sdk/channel-reply-pipeline';
 import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
 
 import type { ResolvedMaxAccount } from './accounts.js';

@@ -30,10 +30,10 @@
 openclaw-max-plus/
 ├── openclaw.plugin.json    # Манифест плагина
 ├── package.json
+├── index.ts               # Точка входа плагина (register → channel)
 ├── tsconfig.json
 ├── README.md
 ├── src/
-│   ├── index.ts            # Точка входа плагина (register → channel)
 │   ├── types.ts            # TypeScript-типы MAX Bot API
 │   ├── api.ts              # HTTP-клиент MAX API (send/edit/delete/upload/actions)
 │   ├── monitor.ts          # Long polling + webhook (приём обновлений, dispatch)
@@ -58,7 +58,8 @@ openclaw-max-plus/
 Пошаговый runbook (выполнять по порядку, проверяя результат каждого шага).
 
 **0. Предусловия**
-- Node.js **≥ 22.15** (нужен `tls.setDefaultCACertificates` для авто-доверия CA Минцифры → домен `platform-api2.max.ru`). Проверка: `node -e "const t=require('node:tls');console.log(typeof t.setDefaultCACertificates)"` → должно быть `function`.
+- OpenClaw **2026.9.3 или новее**; версия 0.6.0 проверена с SDK 2026.9.3.
+- Node.js **24.16+ (ветка 24)** или **26.1+**, согласно требованиям OpenClaw 2026.9.3. Для авто-доверия CA Минцифры используется `tls.setDefaultCACertificates`. Проверка: `node -e "const t=require('node:tls');console.log(typeof t.setDefaultCACertificates)"` → должно быть `function`.
 - Установлен `openclaw` (CLI/gateway). Проверка: `openclaw --version`.
 - Есть токен бота MAX (см. «Установка → Создать бота в MAX» ниже). Никогда не печатать токен в логи/коммиты.
 
@@ -88,14 +89,13 @@ openclaw plugins install --link /путь/к/openclaw-max-plus   # симлин�
   "dmPolicy": "allowlist",         // pairing | allowlist | open
   "allowFrom": ["ВАШ_USER_ID"],    // см. шаг 6, как узнать user_id
   "streamMode": "partial"
-  // "apiBaseUrl": "https://platform-api.max.ru"  // ОПЦ.: откат на legacy-домен (если Node < 22.15)
 }}}
 ```
 > Держать `src/config-schema.ts` ↔ `openclaw.plugin.json` в синхроне при добавлении полей.
 
 **4. Индикатор «печатает…» — ОБЯЗАТЕЛЬНО задать глобально** (иначе индикатор будет мигать и обрываться, в MAX одиночный `typing_on` живёт ~5–6с):
 ```bash
-openclaw config set session.typingIntervalSeconds 4
+openclaw config set agents.defaults.typingIntervalSeconds 4
 ```
 
 **5. Перезапустить gateway** — зависит от того, как он запущен:
@@ -105,7 +105,7 @@ openclaw config set session.typingIntervalSeconds 4
 
 **6. Проверить и найти свой user_id:**
 ```bash
-openclaw plugins inspect max --runtime        # канал max зарегистрирован?
+openclaw plugins inspect openclaw-max-plus --runtime        # канал max зарегистрирован?
 # Живой лог gateway (stdout). Путь зависит от запуска:
 tail -f ~/Library/Logs/openclaw/gateway.log   # macOS launchd
 # Написать боту в MAX любой текст → в логе появится "Starting MAX provider (@bot)" и обработка;
@@ -114,7 +114,7 @@ tail -f ~/Library/Logs/openclaw/gateway.log   # macOS launchd
 Подставить найденный `user_id` в `allowFrom` (шаг 3) и перезапустить gateway. Бот должен ответить.
 
 **7. Диагностика «бот не отвечает»** (по приоритету):
-1. `getUpdates`/TLS падает → проверь домен: `curl -I -H "Authorization: ТОКЕН" https://platform-api2.max.ru/me` (200/401 = TLS ок; `TLS:20`/`UNABLE_TO_GET_ISSUER` = нет CA → Node < 22.15 или `npm run build` не клал `certs/` → временно `apiBaseUrl: "https://platform-api.max.ru"`).
+1. `getUpdates`/TLS падает → проверь домен: `curl -I -H "Authorization: ТОКЕН" https://platform-api2.max.ru/me` (200/401 = TLS ок; `TLS:20`/`UNABLE_TO_GET_ISSUER` = нет CA → Node < 22.15 или `npm run build` не клал `certs/` → обнови Node и пересобери плагин с `certs/`).
 2. Сообщение приходит, но ответа нет → смотри `~/.openclaw/agents/main/sessions/*.jsonl` (последние записи): дошёл ли inbound, не упал ли `toolResult` отправки (напр. `POST /messages → 404` = неверный chat_id; `ENAMETOOLONG` = inline-медиа; LLM-биллинг = квота).
 3. `dmPolicy`/`allowFrom` блокируют отправителя → проверь user_id в `allowFrom`.
 
@@ -187,19 +187,19 @@ openclaw plugins install ./.           # или абсолютный путь к
 openclaw gateway restart
 ```
 
-> Можно проверить регистрацию канала: `openclaw plugins inspect max --runtime`.
+> Можно проверить регистрацию канала: `openclaw plugins inspect openclaw-max-plus --runtime`.
 
 ## Индикатор «печатает…» (typing)
 
 MAX гасит индикатор «печатает…» через несколько секунд, поэтому плагин
 переотправляет его весь ход ответа через keepalive хоста. Частота
-переотправки задаётся **глобальным** параметром `session.typingIntervalSeconds`
+переотправки задаётся **глобальным** параметром `agents.defaults.typingIntervalSeconds`
 (по умолчанию 6с). Одиночный `typing_on` в MAX живёт ~5–6с, поэтому значение по
 умолчанию (6с) даёт разрывы. **Обязательно** выставьте **4** — иначе индикатор
 будет мигать и обрываться:
 
 ```bash
-openclaw config set session.typingIntervalSeconds 4
+openclaw config set agents.defaults.typingIntervalSeconds 4
 openclaw gateway restart
 ```
 
@@ -363,7 +363,7 @@ MAX_BOT_TOKEN=xxx node scripts/test-send.mjs <chat_id> "Текст сообще�
 - Документация: [dev.max.ru/docs-api](https://dev.max.ru/docs-api)
 - ⚠️ `GET /chats` (список чатов) помечен устаревшим с июня 2026; одиночный `GET /chats/{chatId}` работает.
 - ⚠️ Команды бота задаются через `PATCH /me` (поле `commands`); отдельного `POST /me/commands` в API нет.
-- ✅ **Домен:** по умолчанию `platform-api2.max.ru` (legacy `platform-api.max.ru` отключается 19.07.2026). Этот домен подписан корневым CA Минцифры — плагin **бандлит CA и авто-доверяет ему в рамках процесса** (`certs/`, `src/ca-trust.ts`), **без установки сертификата в систему**. Требует Node ≥ 22.15. Откат/override: `apiBaseUrl` в конфиге канала или env `MAX_API_BASE_URL`.
+- ✅ **Домен:** по умолчанию `platform-api2.max.ru` (legacy `platform-api.max.ru` отключается 19.07.2026). Этот домен подписан корневым CA Минцифры — плагин **бандлит CA и авто-доверяет ему в рамках процесса** (`certs/`, `src/ca-trust.ts`), **без установки сертификата в систему**. Требует Node ≥ 22.15. Откат/override: `apiBaseUrl` в конфиге канала или env `MAX_API_BASE_URL`.
 
 ## Лицензия
 
