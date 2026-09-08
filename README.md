@@ -4,6 +4,15 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-ESM-blue)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/node-24.16%2B%20%7C%2026.1%2B-green)](https://nodejs.org/)
 
+> [!IMPORTANT]
+> **Для распознавания голосовых настройте Webhook.**
+>
+> При Long Polling (`GET /updates`) нативные голосовые, записанные микрофоном в MAX, могут приходить как пустой `message_created`: без `message`, аудиофайла и идентификатора чата. Плагину нечего передать на распознавание. [Обсуждение ограничения и перехода на вебхуки](https://github.com/love-apples/maxapi/issues/191#issuecomment-5325683687).
+>
+> Укажите `channels.max.webhookUrl` — публичный HTTPS-адрес на порту 443 с доверенным сертификатом — и `channels.max.webhookSecret`, затем перезапустите Gateway. Для расшифровки также нужен настроенный движок распознавания OpenClaw (`tools.media.audio`), например локальный Whisper. Сам вебхук обеспечивает доставку аудио.
+>
+> **Проверено 9 сентября 2026 года:** голосовое из приложения MAX дошло через вебхук, Whisper распознал речь, бот ответил. В плагине **0.6.2** также исправлено дублирование черновика и готового ответа при `streamMode: "partial"`; повторная проверка в MAX подтвердила исправление.
+
 Канал-плагин для подключения AI-ассистента [OpenClaw](https://openclaw.ai) к мессенджеру [MAX](https://max.ru) (max.ru Bot API).
 
 > **English:** `openclaw-max-plus` connects [OpenClaw](https://openclaw.ai) to [MAX](https://max.ru) using the Bot API. Supports text, media, inline buttons, response streaming, polling, webhooks, multiple accounts, and sender-based agent routing. Requires OpenClaw 2026.9.3+, Node.js 24.16+ on the 24.x branch or 26.1+. Full setup guide below is in Russian.
@@ -22,7 +31,7 @@
 - Long polling и Webhook (с валидацией secret/url)
 - Мультиаккаунт, DM-security, pairing, групповые политики
 
-> Реакции и опросы MAX Bot API **не поддерживает** (платформенное ограничение). Для нативных голосовых используйте Webhook: доставка аудио и распознавание через OpenClaw проверены 09.09.2026. В Long Polling встречаются пустые события без аудио.
+> Реакции и опросы MAX Bot API **не поддерживает** (платформенное ограничение).
 
 ## Структура проекта
 
