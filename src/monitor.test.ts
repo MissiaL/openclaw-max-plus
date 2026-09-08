@@ -6,6 +6,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { resolveAgentRoute } from 'openclaw/plugin-sdk/routing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ResolvedMaxAccount } from './accounts.js';
@@ -22,7 +23,7 @@ import {
   recordInboundChat,
   startMaxPolling,
 } from './monitor.js';
-import { setMaxRuntime } from './runtime.js';
+import { getMaxRuntime, setMaxRuntime } from './runtime.js';
 
 describe('MAX Monitor', () => {
   describe('startMaxPolling', () => {
@@ -99,6 +100,45 @@ describe('MAX Monitor', () => {
         body: { mid: 'mid.test', text },
       } as unknown as MaxMessage;
     }
+
+    it.each([
+      [1001, 9001, 'main'],
+      [1002, 9002, 'work'],
+    ])(
+      'routes sender %s in chat %s to the bound agent',
+      async (userId, chatId, agentId) => {
+        const finalizeInboundContext = installRuntimeSpy();
+        vi.mocked(getMaxRuntime().channel.routing.resolveAgentRoute).mockImplementation(
+          resolveAgentRoute,
+        );
+        const message = dmMessage('hello');
+        message.sender!.user_id = userId;
+        message.recipient.chat_id = chatId;
+        await processIncomingMessage(message, 'ru', {
+          api,
+          account,
+          config: {
+            agents: { ownership: 'explicit', entries: { main: {}, work: {} } },
+            session: { dmScope: 'per-channel-peer' },
+            bindings: [
+              {
+                agentId: 'main',
+                match: { channel: 'max', peer: { kind: 'direct', id: '1001' } },
+              },
+              {
+                agentId: 'work',
+                match: { channel: 'max', peer: { kind: 'direct', id: '1002' } },
+              },
+            ],
+          },
+          abortSignal: new AbortController().signal,
+        });
+        const ctx = finalizeInboundContext.mock.calls[0][0];
+        expect(ctx.SessionKey).toBe(`agent:${agentId}:max:direct:${userId}`);
+        expect(ctx.To).toBe(`max:${chatId}`);
+        expect(ctx.OriginatingTo).toBe(`max:${chatId}`);
+      },
+    );
 
     it('marks a slash command turn as authorized', async () => {
       const finalizeInboundContext = installRuntimeSpy();

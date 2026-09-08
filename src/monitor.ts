@@ -604,7 +604,8 @@ export async function processIncomingMessage(
     });
   }
 
-  // Resolve agent route
+  // Direct-message bindings identify people by user_id; MAX's chat_id is a
+  // separate delivery address and must remain the target for replies.
   const chatIdStr = String(chatId ?? senderId);
   const route = core.channel.routing.resolveAgentRoute({
     cfg: config,
@@ -612,7 +613,7 @@ export async function processIncomingMessage(
     accountId: account.accountId,
     peer: {
       kind: isGroup ? 'group' : 'direct',
-      id: chatIdStr,
+      id: isGroup ? chatIdStr : String(senderId ?? chatId),
     },
   });
 

@@ -2,11 +2,11 @@
 
 [![license](https://img.shields.io/github/license/MissiaL/openclaw-max-plus)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-ESM-blue)](https://www.typescriptlang.org/)
-[![Node](https://img.shields.io/badge/node-%E2%89%A522.15-green)](https://nodejs.org/)
+[![Node](https://img.shields.io/badge/node-24.16%2B%20%7C%2026.1%2B-green)](https://nodejs.org/)
 
 Канал-плагин для подключения AI-ассистента [OpenClaw](https://openclaw.ai) к мессенджеру [MAX](https://max.ru) (max.ru Bot API).
 
-> **English:** `openclaw-max-plus` is a channel plugin that connects the [OpenClaw](https://openclaw.ai) AI assistant to the [MAX messenger](https://max.ru) (max.ru Bot API). It brings Telegram-level parity to MAX: text & markdown, media (photo/video/file/sticker/contact/location, incl. inline base64), inline buttons, reply/forward/edit/delete, pin/unpin, response streaming, typing indicator, long polling **and** webhook, multi-account, and DM security. Written in TypeScript (ESM), requires Node.js ≥ 22.15. Full setup guide below is in Russian.
+> **English:** `openclaw-max-plus` connects [OpenClaw](https://openclaw.ai) to [MAX](https://max.ru) using the Bot API. Supports text, media, inline buttons, response streaming, polling, webhooks, multiple accounts, and sender-based agent routing. Requires OpenClaw 2026.9.3+, Node.js 24.16+ on the 24.x branch or 26.1+. Full setup guide below is in Russian.
 
 ## Что это
 
@@ -58,7 +58,7 @@ openclaw-max-plus/
 Пошаговый runbook (выполнять по порядку, проверяя результат каждого шага).
 
 **0. Предусловия**
-- OpenClaw **2026.9.3 или новее**; версия 0.6.0 проверена с SDK 2026.9.3.
+- OpenClaw **2026.9.3 или новее**; версия 0.6.1 проверена с SDK 2026.9.3.
 - Node.js **24.16+ (ветка 24)** или **26.1+**, согласно требованиям OpenClaw 2026.9.3. Для авто-доверия CA Минцифры используется `tls.setDefaultCACertificates`. Проверка: `node -e "const t=require('node:tls');console.log(typeof t.setDefaultCACertificates)"` → должно быть `function`.
 - Установлен `openclaw` (CLI/gateway). Проверка: `openclaw --version`.
 - Есть токен бота MAX (см. «Установка → Создать бота в MAX» ниже). Никогда не печатать токен в логи/коммиты.
@@ -92,6 +92,15 @@ openclaw plugins install --link /путь/к/openclaw-max-plus   # симлин�
 }}}
 ```
 > Держать `src/config-schema.ts` ↔ `openclaw.plugin.json` в синхроне при добавлении полей.
+
+Для разных агентов в личных диалогах задавайте `bindings[].match.peer` как
+`{ "kind": "direct", "id": "USER_ID" }`. Начиная с 0.6.1 маршрут и ключ сессии
+используют `sender.user_id`; ответы по-прежнему уходят в реальный `recipient.chat_id`.
+После обновления старые сессии, названные по ID чата, остаются в истории; новый
+входящий диалог получает ключ по ID пользователя. Для групп маршрут использует ID чата.
+При нескольких агентах задайте также владельца канала: например,
+`{ "agentId": "main", "match": { "channel": "max", "accountId": "default" } }`.
+Привязка конкретного пользователя имеет приоритет над владельцем канала.
 
 **4. Индикатор «печатает…» — ОБЯЗАТЕЛЬНО задать глобально** (иначе индикатор будет мигать и обрываться, в MAX одиночный `typing_on` живёт ~5–6с):
 ```bash
