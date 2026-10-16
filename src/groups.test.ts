@@ -263,7 +263,7 @@ describe('MAX Group Functionality', () => {
         groups: {
           '12345': {
             toolsBySender: {
-              user1: 'all',
+              'id:user1': 'all',
               '*': 'none',
             },
           },
@@ -286,7 +286,7 @@ describe('MAX Group Functionality', () => {
         groups: {
           '12345': {
             toolsBySender: {
-              otheruser: 'all',
+              'id:otheruser': 'all',
             },
             tools: 'none',
           },
@@ -309,7 +309,7 @@ describe('MAX Group Functionality', () => {
         groups: {
           '12345': {
             toolsBySender: {
-              '@admin': 'all',
+              'username:admin': 'all',
             },
           },
         },
@@ -323,9 +323,7 @@ describe('MAX Group Functionality', () => {
         senderUsername: 'admin',
         senderE164: undefined,
       });
-      // Depends on resolveToolsBySender matching — may or may not match @admin to username
-      // Just verify it returns something or undefined (no crash)
-      expect(result === 'all' || result === undefined).toBe(true);
+      expect(result).toBe('all');
     });
   });
 

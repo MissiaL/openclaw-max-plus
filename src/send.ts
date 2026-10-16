@@ -464,7 +464,7 @@ export async function sendMaxMediaMessage(
     let nameForType = mediaPath;
     if (/^https?:\/\//i.test(mediaPath)) {
       const maxBytes = ((opts as { mediaMaxMb?: number }).mediaMaxMb ?? 20) * 1024 * 1024;
-      const loaded = await getMaxRuntime().channel.media.fetchRemoteMedia({
+      const loaded = await getMaxRuntime().channel.media.readRemoteMediaBuffer({
         url: mediaPath,
         maxBytes,
       });

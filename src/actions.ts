@@ -2,10 +2,10 @@
  * MAX channel message actions adapter — implements message tool actions
  */
 
-import { jsonResult } from 'openclaw/plugin-sdk/agent-runtime';
 import type { ChannelMessageActionAdapter } from 'openclaw/plugin-sdk/channel-contract';
 import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
 import { readStringParam } from 'openclaw/plugin-sdk/param-readers';
+import { jsonResult } from 'openclaw/plugin-sdk/tool-results';
 
 import { listMaxAccountIds, resolveMaxAccount } from './accounts.js';
 import { getMaxRuntime } from './runtime.js';
@@ -212,7 +212,10 @@ export const maxMessageActions: ChannelMessageActionAdapter = {
         // Download if URL, otherwise use as local file path
         if (mediaSource.startsWith('http://') || mediaSource.startsWith('https://')) {
           const maxBytes = (account.config.mediaMaxMb ?? 20) * 1024 * 1024;
-          const loaded = await core.channel.media.fetchRemoteMedia({ url: mediaSource, maxBytes });
+          const loaded = await core.channel.media.readRemoteMediaBuffer({
+            url: mediaSource,
+            maxBytes,
+          });
 
           // Write to temp file. Never build the path from the remote-supplied
           // filename (path traversal): strip to a sanitized basename.

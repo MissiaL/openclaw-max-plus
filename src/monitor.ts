@@ -6,7 +6,11 @@
  */
 
 import type { ChannelLogSink } from 'openclaw/plugin-sdk/channel-contract';
-import { createReplyPrefixOptions } from 'openclaw/plugin-sdk/channel-reply-pipeline';
+import {
+  type ChannelInboundMediaInput,
+  toInboundMediaFacts,
+} from 'openclaw/plugin-sdk/channel-inbound';
+import { createReplyPrefixOptions } from 'openclaw/plugin-sdk/channel-outbound';
 import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
 
 import type { ResolvedMaxAccount } from './accounts.js';
@@ -401,9 +405,7 @@ export async function processIncomingMessage(
 
   // Process attachments: download media, build descriptions for non-downloadable types
   const attachmentDescriptions: string[] = [];
-  const mediaPaths: string[] = [];
-  const mediaUrls: string[] = [];
-  const mediaTypes: string[] = [];
+  const media: ChannelInboundMediaInput[] = [];
 
   for (const att of attachments) {
     const attType = att.type ?? 'unknown';
@@ -425,17 +427,17 @@ export async function processIncomingMessage(
       if (url && typeof url === 'string' && url.startsWith('http')) {
         try {
           const maxBytes = (account.config.mediaMaxMb ?? 20) * 1024 * 1024;
-          const fetched = await core.channel.media.fetchRemoteMedia({ url, maxBytes });
-          const saved = await core.channel.media.saveMediaBuffer(
-            Buffer.from(fetched.buffer),
-            fetched.contentType,
-            'inbound',
+          const saved = await core.channel.media.saveRemoteMedia({
+            url,
             maxBytes,
-            fetched.fileName,
-          );
-          mediaPaths.push(saved.path);
-          mediaUrls.push(saved.path);
-          if (saved.contentType) mediaTypes.push(saved.contentType);
+            subdir: 'inbound',
+          });
+          media.push({
+            path: saved.path,
+            contentType: saved.contentType,
+            fileName: saved.fileName,
+            messageId,
+          });
         } catch (err) {
           log?.error?.(`[${account.accountId}] Failed to download ${attType}: ${String(err)}`);
           // Fall back to text description (sticker code already added above)
@@ -471,7 +473,7 @@ export async function processIncomingMessage(
   }
 
   const attachmentText = attachmentDescriptions.join(' ');
-  const hasMedia = mediaPaths.length > 0;
+  const hasMedia = media.length > 0;
   const effectiveText = rawText.trim() || attachmentText || forwardedText;
 
   // Skip truly empty messages (no text, no media, no meaningful attachments)
@@ -692,13 +694,8 @@ export async function processIncomingMessage(
     ReplyToIdFull: replyToId,
     OriginatingChannel: 'max',
     OriginatingTo: `max:${chatIdStr}`,
-    // Media attachments (downloaded to local paths)
-    MediaPath: mediaPaths[0],
-    MediaPaths: mediaPaths.length > 0 ? mediaPaths : undefined,
-    MediaUrl: mediaUrls[0],
-    MediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
-    MediaType: mediaTypes[0],
-    MediaTypes: mediaTypes.length > 0 ? mediaTypes : undefined,
+    // Media attachments (downloaded to local paths), in attachment order
+    media: hasMedia ? toInboundMediaFacts(media) : undefined,
     // Text-slash command detection: treat /status, /models etc. as text commands
     // so OpenClaw routes them through handleCommands instead of silently dropping
     // Text-slash command detection: treat /status, /models etc. as text commands
@@ -1103,7 +1100,7 @@ async function deliverMaxReply(params: {
       // Download media first if it's a URL
       if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
         const maxBytes = (account.config.mediaMaxMb ?? 20) * 1024 * 1024;
-        const loaded = await core.channel.media.fetchRemoteMedia({ url: mediaUrl, maxBytes });
+        const loaded = await core.channel.media.readRemoteMediaBuffer({ url: mediaUrl, maxBytes });
 
         // Write to temp file
         const fs = await import('fs/promises');

@@ -55,7 +55,7 @@ describe('MAX Monitor', () => {
       const finalizeInboundContext = vi.fn((ctx: Record<string, unknown>) => ctx);
       setMaxRuntime({
         channel: {
-          media: { fetchRemoteMedia: vi.fn(), saveMediaBuffer: vi.fn() },
+          media: { readRemoteMediaBuffer: vi.fn(), saveRemoteMedia: vi.fn() },
           pairing: { readAllowFromStore: vi.fn(async () => [] as string[]) },
           routing: {
             resolveAgentRoute: vi.fn(() => ({
@@ -235,6 +235,43 @@ describe('MAX Monitor', () => {
       });
       const ctx = finalizeInboundContext.mock.calls[0][0] as { CommandTurn?: unknown };
       expect(ctx.CommandTurn).toBeUndefined();
+    });
+
+    it('passes downloaded attachments as ordered media facts', async () => {
+      const finalizeInboundContext = installRuntimeSpy();
+      const saveRemoteMedia = vi.fn(async () => ({
+        id: 'm1',
+        path: '/media/inbound/m1.jpg',
+        size: 3,
+        contentType: 'image/jpeg',
+      }));
+      (getMaxRuntime().channel.media as { saveRemoteMedia: unknown }).saveRemoteMedia =
+        saveRemoteMedia;
+      const message = dmMessage('');
+      (message.body as { attachments?: unknown }).attachments = [
+        { type: 'image', payload: { url: 'https://cdn.max.ru/i.jpg' } },
+      ];
+      await processIncomingMessage(message, 'ru', {
+        api,
+        account,
+        config: {} as never,
+        abortSignal: new AbortController().signal,
+      });
+      expect(saveRemoteMedia).toHaveBeenCalledWith(
+        expect.objectContaining({ url: 'https://cdn.max.ru/i.jpg', subdir: 'inbound' }),
+      );
+      const ctx = finalizeInboundContext.mock.calls[0][0] as {
+        media?: { path?: string; contentType?: string; messageId?: string }[];
+        MediaPath?: unknown;
+      };
+      expect(ctx.media).toEqual([
+        expect.objectContaining({
+          path: '/media/inbound/m1.jpg',
+          contentType: 'image/jpeg',
+          messageId: 'mid.test',
+        }),
+      ]);
+      expect(ctx.MediaPath).toBeUndefined();
     });
 
     it('acks a callback and routes the reply to the real chat_id (not the user_id)', async () => {
@@ -542,7 +579,7 @@ describe('MAX Monitor', () => {
       const finalizeInboundContext = vi.fn((ctx: Record<string, unknown>) => ctx);
       setMaxRuntime({
         channel: {
-          media: { fetchRemoteMedia: vi.fn(), saveMediaBuffer: vi.fn() },
+          media: { readRemoteMediaBuffer: vi.fn(), saveRemoteMedia: vi.fn() },
           pairing: { readAllowFromStore: vi.fn(async () => [] as string[]) },
           routing: {
             resolveAgentRoute: vi.fn(() => ({

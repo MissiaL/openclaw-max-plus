@@ -1,6 +1,6 @@
 import type { ChannelLogSink } from 'openclaw/plugin-sdk/channel-contract';
-import { resolveNativeCommandsEnabled } from 'openclaw/plugin-sdk/config-runtime';
 import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
+import { resolveNativeCommandsEnabled } from 'openclaw/plugin-sdk/native-command-config-runtime';
 import { listNativeCommandSpecsForConfig } from 'openclaw/plugin-sdk/native-command-registry';
 
 import type { MaxAccountConfig, ResolvedMaxAccount } from './accounts.js';
