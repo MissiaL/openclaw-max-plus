@@ -13,7 +13,7 @@
     "url": "https://github.com/MissiaL/openclaw-max-plus/issues"
   },
   "scripts": {
-    "build": "rm -rf dist-ts dist/src dist/certs && tsc --noEmit false --noEmitOnError false --outDir dist-ts && mkdir -p dist/src && cp dist-ts/index.js dist/index.js && cp dist-ts/src/*.js dist/src/ && cp -R certs dist/certs",
+    "build": "rm -rf dist-ts dist/src dist/certs && tsc --noEmit false --noEmitOnError false --outDir dist-ts && mkdir -p dist/src && cp dist-ts/index.js dist-ts/setup-entry.js dist/ && cp dist-ts/src/*.js dist/src/ && cp -R certs dist/certs",
     "prepack": "npm run build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
@@ -40,8 +40,16 @@
     "extensions": [
       "./dist/index.js"
     ],
+    "setupEntry": "./dist/setup-entry.js",
     "channel": {
       "id": "max",
+      "configuredState": {
+        "env": {
+          "allOf": [
+            "MAX_BOT_TOKEN"
+          ]
+        }
+      },
       "label": "MAX",
       "selectionLabel": "MAX (max.ru)",
       "docsPath": "/channels/max",

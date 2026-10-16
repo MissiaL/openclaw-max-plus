@@ -4,19 +4,18 @@
  * Implements the ChannelPlugin interface to integrate MAX messenger.
  */
 
+import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from 'openclaw/plugin-sdk/account-id';
+import type { ChannelMeta } from 'openclaw/plugin-sdk/channel-contract';
+import type { ChannelPlugin, OpenClawConfig } from 'openclaw/plugin-sdk/channel-core';
 import type { GroupToolPolicyConfig } from 'openclaw/plugin-sdk/channel-policy';
 import { resolveToolsBySender } from 'openclaw/plugin-sdk/channel-policy';
 import { PAIRING_APPROVED_MESSAGE } from 'openclaw/plugin-sdk/channel-status';
-import type { ChannelMeta, ChannelPlugin } from 'openclaw/plugin-sdk/core';
-import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
 import {
   applyAccountNameToChannelSection,
   buildChannelConfigSchema,
-  DEFAULT_ACCOUNT_ID,
   deleteAccountFromConfigSection,
   formatPairingApproveHint,
   migrateBaseNameToDefaultAccount,
-  normalizeAccountId,
   setAccountEnabledInConfigSection,
 } from 'openclaw/plugin-sdk/core';
 

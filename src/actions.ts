@@ -3,7 +3,7 @@
  */
 
 import type { ChannelMessageActionAdapter } from 'openclaw/plugin-sdk/channel-contract';
-import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
+import type { OpenClawConfig } from 'openclaw/plugin-sdk/channel-core';
 import { readStringParam } from 'openclaw/plugin-sdk/param-readers';
 import { jsonResult } from 'openclaw/plugin-sdk/tool-results';
 

@@ -6,12 +6,12 @@
  */
 
 import type { ChannelLogSink } from 'openclaw/plugin-sdk/channel-contract';
+import type { OpenClawConfig } from 'openclaw/plugin-sdk/channel-core';
 import {
   type ChannelInboundMediaInput,
   toInboundMediaFacts,
 } from 'openclaw/plugin-sdk/channel-inbound';
 import { createReplyPrefixOptions } from 'openclaw/plugin-sdk/channel-outbound';
-import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
 
 import type { ResolvedMaxAccount } from './accounts.js';
 import type { MaxApi } from './api.js';

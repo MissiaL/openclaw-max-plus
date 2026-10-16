@@ -3,7 +3,7 @@
  */
 
 import { mkdtemp, rm, writeFile } from 'fs/promises';
-import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
+import type { OpenClawConfig } from 'openclaw/plugin-sdk/channel-core';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

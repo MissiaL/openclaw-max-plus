@@ -2,8 +2,8 @@
  * MAX channel onboarding — setup wizard for `openclaw channel add max`
  */
 
-import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
-import { DEFAULT_ACCOUNT_ID } from 'openclaw/plugin-sdk/core';
+import { DEFAULT_ACCOUNT_ID } from 'openclaw/plugin-sdk/account-id';
+import type { OpenClawConfig } from 'openclaw/plugin-sdk/channel-core';
 import type { ChannelSetupDmPolicy, ChannelSetupWizard, DmPolicy } from 'openclaw/plugin-sdk/setup';
 import { formatDocsLink } from 'openclaw/plugin-sdk/setup';
 

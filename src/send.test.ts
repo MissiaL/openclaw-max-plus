@@ -2,7 +2,7 @@
  * Tests for MAX message sending
  */
 
-import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
+import type { OpenClawConfig } from 'openclaw/plugin-sdk/channel-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {

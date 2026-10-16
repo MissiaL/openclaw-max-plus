@@ -16,7 +16,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
+import type { OpenClawConfig } from 'openclaw/plugin-sdk/channel-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { maxPlugin } from './channel.js';

@@ -6,7 +6,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Socket } from 'node:net';
 import { Readable } from 'node:stream';
 
-import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
+import type { OpenClawConfig } from 'openclaw/plugin-sdk/channel-core';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ResolvedMaxAccount } from './accounts.js';

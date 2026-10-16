@@ -4,8 +4,8 @@
 
 import { readFileSync } from 'node:fs';
 
-import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
-import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from 'openclaw/plugin-sdk/core';
+import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from 'openclaw/plugin-sdk/account-id';
+import type { OpenClawConfig } from 'openclaw/plugin-sdk/channel-core';
 
 import type { MaxBotCommand } from './types.js';
 

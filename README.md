@@ -39,7 +39,8 @@
 openclaw-max-plus/
 ├── openclaw.plugin.json    # Манифест плагина
 ├── package.json
-├── index.ts               # Точка входа плагина (register → channel)
+├── index.ts               # Точка входа (defineChannelPluginEntry, webhook-маршруты в full)
+├── setup-entry.ts         # Лёгкая setup-точка для неконфигурированного канала
 ├── tsconfig.json
 ├── README.md
 ├── src/

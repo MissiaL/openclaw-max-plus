@@ -3,12 +3,16 @@
   "name": "MAX",
   "description": "MAX messenger channel plugin (max.ru Bot API, long polling)",
   "version": "0.7.0",
+  "categories": [
+    "channels"
+  ],
   "channels": [
     "max"
   ],
-  "channelEnvVars": {
-    "max": [
-      "MAX_BOT_TOKEN"
+  "activation": {
+    "onStartup": false,
+    "onChannels": [
+      "max"
     ]
   },
   "channelConfigs": {

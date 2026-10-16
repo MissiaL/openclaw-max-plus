@@ -2,7 +2,7 @@
  * Outbound message sending for MAX.
  */
 
-import type { OpenClawConfig } from 'openclaw/plugin-sdk/core';
+import type { OpenClawConfig } from 'openclaw/plugin-sdk/channel-core';
 
 import { resolveMaxAccount } from './accounts.js';
 import {

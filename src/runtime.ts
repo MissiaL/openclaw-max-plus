@@ -1,14 +1,9 @@
-import type { PluginRuntime } from 'openclaw/plugin-sdk/core';
+import { createPluginRuntimeStore, type PluginRuntime } from 'openclaw/plugin-sdk/runtime-store';
 
-let runtime: PluginRuntime | null = null;
+const store = createPluginRuntimeStore<PluginRuntime>({
+  pluginId: 'openclaw-max-plus',
+  errorMessage: 'MAX runtime not initialized',
+});
 
-export function setMaxRuntime(next: PluginRuntime) {
-  runtime = next;
-}
-
-export function getMaxRuntime(): PluginRuntime {
-  if (!runtime) {
-    throw new Error('MAX runtime not initialized');
-  }
-  return runtime;
-}
+export const setMaxRuntime = store.setRuntime;
+export const getMaxRuntime = store.getRuntime;
