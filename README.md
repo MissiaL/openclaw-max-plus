@@ -68,8 +68,8 @@ openclaw-max-plus/
 Пошаговый runbook (выполнять по порядку, проверяя результат каждого шага).
 
 **0. Предусловия**
-- OpenClaw **2026.10.4 или новее**; версия 0.7.0 проверена с SDK 2026.10.4. Для OpenClaw 2026.9.x используйте плагин 0.6.3.
-- Node.js **24.16+ (ветка 24)** или **26.1+**, согласно требованиям OpenClaw 2026.10.4. Для авто-доверия CA Минцифры используется `tls.setDefaultCACertificates`. Проверка: `node -e "const t=require('node:tls');console.log(typeof t.setDefaultCACertificates)"` → должно быть `function`.
+- OpenClaw **2026.10.4 или новее**. Плагин 0.7.2 собран и проверен с SDK 2026.11.10. Для OpenClaw 2026.9.x используйте плагин 0.6.3.
+- Node.js **24.16+ (ветка 24)** или **26.1+**, согласно требованиям OpenClaw 2026.11.10. Для авто-доверия CA Минцифры используется `tls.setDefaultCACertificates`. Проверка: `node -e "const t=require('node:tls');console.log(typeof t.setDefaultCACertificates)"` → должно быть `function`.
 - Установлен `openclaw` (CLI/gateway). Проверка: `openclaw --version`.
 - Есть токен бота MAX (см. «Установка → Создать бота в MAX» ниже). Никогда не печатать токен в логи/коммиты.
 
